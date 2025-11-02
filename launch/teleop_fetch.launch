@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Launch teleoperation node for Fetch robot -->
+  <node name="teleop_fetch" pkg="teleop_fetch" type="fetcher.py" output="screen">
+    <!-- Configuration parameters -->
+    <param name="head_sensitivity" value="1.0" />
+    <param name="max_head_pan" value="2.0" />
+    <param name="max_head_tilt" value="2.0" />
+    <param name="movement_duration" value="0.2" />
+  </node>
+</launch>
