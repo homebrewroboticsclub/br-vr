@@ -10,14 +10,14 @@ from ros_robot_controller.msg import SetBusServosPosition, BusServoPosition
 
 class TeleopFetcher:
     """
-    ROS node for Fetch robot teleoperation based on VR headset data.
-    Controls robot head and arms based on operator's head and controller positions.
+    ROS node for teleoperation of Fetch robot based on VR headset data.
+    Controls robot head and arms based on operator's head position and controller data.
     
     New arm control system:
     - Controller Y -> sho_pitch (shoulder forward-backward)
     - Controller Z -> sho_roll (shoulder up-down)
     - Controller X -> el_yaw (forearm rotation)
-    - Controller X tilt -> el_pitch (forearm bending)
+    - Controller X tilt -> el_pitch (forearm bend)
     
     Calibration is performed separately for each arm.
     """
@@ -25,11 +25,11 @@ class TeleopFetcher:
     def __init__(self):
         rospy.init_node('teleop_fetch', anonymous=True)
         
-        # Parameters for sensitivity configuration
+        # Sensitivity parameters
         self.head_sensitivity = rospy.get_param('~head_sensitivity', 1.0)
-        self.max_head_pan = rospy.get_param('~max_head_pan', 2.0)  # Maximum head rotation
+        self.max_head_pan = rospy.get_param('~max_head_pan', 2.0)  # Maximum head pan
         self.max_head_tilt = rospy.get_param('~max_head_tilt', 2.0)  # Maximum head tilt
-        self.movement_duration = rospy.get_param('~movement_duration', 0.2)  # Movement time
+        self.movement_duration = rospy.get_param('~movement_duration', 0.2)  # Movement duration
         
         # Publishers for head control
         self.head_pan_pub = rospy.Publisher('/head_pan_controller/command', HeadCommand, queue_size=1)
@@ -38,7 +38,7 @@ class TeleopFetcher:
         # Publisher for robot arm control
         self.arms_pub = rospy.Publisher('/ros_robot_controller/bus_servo/set_position', SetBusServosPosition, queue_size=1)
         
-        # Subscribers to VR headset data
+        # Subscribers for VR headset data
         rospy.Subscriber('/quest/poses', PoseArray, self.pose_callback, queue_size=10)
         rospy.Subscriber('/quest/joints', JointState, self.joints_callback, queue_size=10)
         
@@ -66,7 +66,7 @@ class TeleopFetcher:
             'right_b': 0.0
         }
         
-        # Controller orientation data (for getting tilt)
+        # Controller orientation data (for tilt calculation)
         self.left_controller_orientation = None
         self.right_controller_orientation = None
         
@@ -75,31 +75,31 @@ class TeleopFetcher:
         self.head_control_enabled = False  # Head control enabled/disabled
         
         # Gripper states (for remembering last position)
-        # Central position = 500, limits ±200
+        # Center position = 500, limits ±200
         self.left_gripper_state = 0.5   # 0.0 = closed, 1.0 = open (inverted)
         self.right_gripper_state = 0.5   # 0.0 = closed, 1.0 = open
         # Calibration system for each arm separately
         self.calibration_data = {
-            'left_hand_base': None,   # Base position of left hand during calibration
-            'right_hand_base': None,  # Base position of right hand during calibration
-            'left_controller_base': None,  # Base position of left controller
-            'right_controller_base': None,  # Base position of right controller
-            'head_base': None         # Base position of head during calibration
+            'left_hand_base': None,   # Left hand base position during calibration
+            'right_hand_base': None,  # Right hand base position during calibration
+            'left_controller_base': None,  # Left controller base position
+            'right_controller_base': None,  # Right controller base position
+            'head_base': None         # Head base position during calibration
         }
         
         # Calibration values for each arm
         self.left_arm_calibration = {
             'sho_pitch_base': 874,    # l_sho_pitch base position
-            'sho_roll_base': 833,     # l_sho_roll base position  
+            'sho_roll_base': 833,     # l_sho_roll base position
             'el_yaw_base': 44,        # l_el_yaw base position
-            'el_pitch_base': 502      # l_el_pitch base position
+            'el_pitch_base': 502     # l_el_pitch base position
         }
         
         self.right_arm_calibration = {
             'sho_pitch_base': 126,    # r_sho_pitch base position
             'sho_roll_base': 167,     # r_sho_roll base position
             'el_yaw_base': 956,       # r_el_yaw base position
-            'el_pitch_base': 498      # r_el_pitch base position
+            'el_pitch_base': 498     # r_el_pitch base position
         }
         
         # Button press tracking to prevent repeated triggers
@@ -108,38 +108,38 @@ class TeleopFetcher:
             'left_y_pressed': False
         }
         
-        # Scaling (robot is 5 times smaller than operator)
+        # Scaling (robot is 5x smaller than operator)
         self.scale_factor = 0.2  # 1/5 = 0.2
         
         # Sensitivity coefficients for new control system
         # Y -> sho_pitch, Z -> sho_roll, X -> el_yaw, X tilt -> el_pitch
         self.arm_sensitivity = {
-            'y_to_sho_pitch': 70,      # Controller Y -> sho_pitch
-            'z_to_sho_roll': 70,       # Controller Z -> sho_roll  
-            'x_to_el_yaw': 70,         # Controller X -> el_yaw
+            'y_to_sho_pitch': 90,      # Controller Y -> sho_pitch
+            'z_to_sho_roll': 90,       # Controller Z -> sho_roll
+            'x_to_el_yaw': 90,         # Controller X -> el_yaw
             'tilt_x_to_el_pitch': 35   # Controller X tilt -> el_pitch
         }
         
-        # Starting positions for robot arms (original values with correct IDs)
+        # Start positions for robot arms (original values with correct IDs)
         self.arm_start_positions = {
             # Right arm (correct IDs from URDF)
             14: 126,   # r_sho_pitch - right shoulder forward-backward
             16: 167,   # r_sho_roll - right shoulder up-down
             18: 498,   # r_el_pitch - right forearm rotation
-            20: 956,   # r_el_yaw - right forearm bending
+            20: 956,   # r_el_yaw - right forearm bend
             22: 500,   # r_gripper - right gripper
             
             # Left arm (correct IDs from URDF)
             13: 874,   # l_sho_pitch - left shoulder forward-backward
             15: 833,   # l_sho_roll - left shoulder up-down
             17: 502,   # l_el_pitch - left forearm rotation
-            19: 44,    # l_el_yaw - left forearm bending
+            19: 44,    # l_el_yaw - left forearm bend
             21: 500    # l_gripper - left gripper
         }
         
         rospy.loginfo("TeleopFetcher node initialized")
         rospy.loginfo(f"Head sensitivity: {self.head_sensitivity}")
-        rospy.loginfo(f"Maximum head rotation: ±{self.max_head_pan}")
+        rospy.loginfo(f"Maximum head pan: ±{self.max_head_pan}")
         rospy.loginfo(f"Maximum head tilt: ±{self.max_head_tilt}")
         rospy.loginfo("Subscribed to topics:")
         rospy.loginfo("  - /quest/poses: operator head and hand position data")
@@ -154,7 +154,7 @@ class TeleopFetcher:
     
     def pose_callback(self, pose_array):
         """
-        Processing operator head and hand position data.
+        Process operator head and hand position data.
         poses[0] = head (abs, frame_id: "unity_world")
         poses[1] = left hand (relative-to-head)
         poses[2] = right hand (relative-to-head)
@@ -175,7 +175,7 @@ class TeleopFetcher:
         left_hand_pose = pose_array.poses[1]
         right_hand_pose = pose_array.poses[2]
         
-        # Save controller orientation for getting tilt
+        # Save controller orientation for tilt calculation
         self.left_controller_orientation = left_hand_pose.orientation
         self.right_controller_orientation = right_hand_pose.orientation
         
@@ -183,16 +183,17 @@ class TeleopFetcher:
         self.last_left_hand_pose = left_hand_pose
         self.last_right_hand_pose = right_hand_pose
         
-        self.process_arms_control(left_hand_pose, right_hand_pose)
+        # TEMPORARILY DISABLED: arm control
+        # self.process_arms_control(left_hand_pose, right_hand_pose)
     
     def joints_callback(self, joint_state):
         """
-        Processing operator hand joint data.
-        Processes VR controller button and joystick data.
+        Process operator arm joint data.
+        Handles VR controller button and joystick data.
         
         Expected data:
         - L_grip, L_index: left controller (grip and trigger)
-        - R_grip, R_index: right controller (grip and trigger)  
+        - R_grip, R_index: right controller (grip and trigger)
         - L_X, L_Y: left buttons (X and Y buttons)
         - R_A, R_B: right buttons (A and B buttons)
         """
@@ -211,7 +212,7 @@ class TeleopFetcher:
             right_a = joint_dict.get('R_A', 0.0)
             right_b = joint_dict.get('R_B', 0.0)
             
-            # Log received data (with rate limiting)
+            # Log received data (rate limited)
             rospy.loginfo_throttle(2, 
                 f"VR controllers - Left: grip={left_grip:.2f}, index={left_index:.2f}, "
                 f"buttons X={left_x:.2f}, Y={left_y:.2f} | "
@@ -227,15 +228,15 @@ class TeleopFetcher:
     
     def process_head_control(self):
         """
-        Processing head control based on operator head position.
+        Process head control based on operator head position.
         Converts operator head orientation to robot head control commands.
         """
         if self.operator_head_orientation is None:
             return
         
-        # Head control is only enabled during active arm control
-        if not self.head_control_enabled:
-            return
+        # Head control enabled only when arm control is active
+        #if not self.head_control_enabled:
+        #    return
         
         # Extract Euler angles from quaternion
         # Y controls head rotation left-right (-1 to 1)
@@ -307,13 +308,13 @@ class TeleopFetcher:
         self.current_head_pan = pan
         self.current_head_tilt = tilt
         
-        # Log commands (with rate limiting)
+        # Log commands (rate limited)
         rospy.loginfo_throttle(0.5, f"Head commands - Pan: {pan:.3f}, Tilt: {tilt:.3f}, Duration: {self.movement_duration}")
     
     def process_vr_controller_input(self, left_grip, left_index, left_x, left_y, 
                                    right_grip, right_index, right_a, right_b):
         """
-        Process VR controller input data.
+        Process input data from VR controllers.
         
         Args:
             left_grip, left_index: left controller (grip and trigger)
@@ -334,9 +335,9 @@ class TeleopFetcher:
         })
         
         # Process buttons for arm and head control
-        # X button (left) - calibration/start control
+        # Button X (left) - calibration/start control
         if left_x > 0.5 and not self.button_states['left_x_pressed']:
-            rospy.loginfo(f"X button pressed! Current state: {self.arm_control_state}")
+            rospy.loginfo(f"Button X pressed! Current state: {self.arm_control_state}")
             self.button_states['left_x_pressed'] = True
             if self.arm_control_state == 'idle':
                 rospy.loginfo("Starting calibration...")
@@ -347,7 +348,7 @@ class TeleopFetcher:
         elif left_x <= 0.5:
             self.button_states['left_x_pressed'] = False
         
-        # Y button (left) - stop control
+        # Button Y (left) - stop control
         if left_y > 0.5 and not self.button_states['left_y_pressed']:
             self.button_states['left_y_pressed'] = True
             if self.arm_control_state == 'controlling':
@@ -355,15 +356,15 @@ class TeleopFetcher:
         elif left_y <= 0.5:
             self.button_states['left_y_pressed'] = False
         
-        # Gripper control
-        if self.arm_control_state == 'controlling':
-            self.control_grippers(left_grip, right_grip, left_index, right_index)
+        # TEMPORARILY DISABLED: gripper control
+        # if self.arm_control_state == 'controlling':
+        #     self.control_grippers(left_grip, right_grip, left_index, right_index)
     
     def process_arms_control(self, left_hand_pose, right_hand_pose):
         """
         Process robot arm control based on new logic:
         - Controller Y -> sho_pitch
-        - Controller Z -> sho_roll  
+        - Controller Z -> sho_roll
         - Controller X -> el_yaw
         - Controller X tilt -> el_pitch
         """
@@ -394,10 +395,10 @@ class TeleopFetcher:
     
     def set_arms_to_start_position(self):
         """
-        Set robot arms to starting position.
-        Send commands to all arm servos with specified positions.
+        Set robot arms to start position.
+        Sends commands to all arm servos with specified positions.
         """
-        rospy.loginfo("Setting robot arms to starting position...")
+        rospy.loginfo("Setting robot arms to start position...")
         
         # Create message for setting servo positions
         arm_msg = SetBusServosPosition()
@@ -417,18 +418,18 @@ class TeleopFetcher:
         
         # Send command
         self.arms_pub.publish(arm_msg)
-        rospy.loginfo("Starting arm pose command sent")
+        rospy.loginfo("Start pose arm command sent")
         rospy.loginfo(f"Set {len(positions)} servos")
         
-        # Wait for movement completion
+        # Wait for movement to complete
         rospy.sleep(arm_msg.duration + 0.5)  # Small delay for completion
-        rospy.loginfo("Starting arm pose set")
+        rospy.loginfo("Start arm pose set")
     
     def start_arm_calibration(self):
         """
-        Start arm calibration. Operator should set arms in starting pose.
+        Start arm calibration. Operator must position arms in start pose.
         """
-        rospy.loginfo("=== STARTING ARM CALIBRATION ===")
+        rospy.loginfo("=== ARM CALIBRATION START ===")
         rospy.loginfo(f"Current state: {self.arm_control_state}")
         
         self.arm_control_state = 'calibrating'
@@ -438,14 +439,14 @@ class TeleopFetcher:
         self.reset_head_to_base()
         
         rospy.loginfo("=== ARM CALIBRATION ===")
-        rospy.loginfo("Set your arms in starting pose and press X to finish calibration")
+        rospy.loginfo("Position arms in start pose and press X to finish calibration")
         rospy.loginfo("Waiting for arm data...")
     
     def finish_arm_calibration(self):
         """
         Finish calibration and start arm control.
         """
-        rospy.loginfo("=== FINISHING CALIBRATION ===")
+        rospy.loginfo("=== CALIBRATION FINISH ===")
         rospy.loginfo(f"Current state: {self.arm_control_state}")
         
         # Save current arm positions as base
@@ -464,7 +465,7 @@ class TeleopFetcher:
             
             self.arm_control_state = 'controlling'
             self.head_control_enabled = True  # Enable head control
-            rospy.loginfo("=== CALIBRATION COMPLETED ===")
+            rospy.loginfo("=== CALIBRATION COMPLETE ===")
             rospy.loginfo("New arm control system activated:")
             rospy.loginfo("  - Controller Y -> sho_pitch")
             rospy.loginfo("  - Controller Z -> sho_roll")
@@ -473,19 +474,19 @@ class TeleopFetcher:
             rospy.loginfo("Press Y to stop")
         else:
             rospy.logwarn("No arm or controller data for calibration. Try again.")
-            rospy.logwarn("Make sure VR headset is connected and transmitting data")
+            rospy.logwarn("Ensure VR headset is connected and transmitting data")
             self.arm_control_state = 'idle'
     
     def stop_arm_control(self):
         """
-        Stop arm and head control, return them to starting pose.
+        Stop arm and head control, return them to start pose.
         """
         self.arm_control_state = 'idle'
         self.head_control_enabled = False  # Disable head control
         rospy.loginfo("=== STOPPING ARM AND HEAD CONTROL ===")
-        rospy.loginfo("Returning arms to starting pose...")
+        rospy.loginfo("Returning arms to start pose...")
         
-        # Return arms to starting pose
+        # Return arms to start pose
         self.set_arms_to_start_position()
         
         # Reset grippers to closed position
@@ -514,26 +515,26 @@ class TeleopFetcher:
     
     def reset_grippers(self):
         """
-        Reset grippers to central position (500).
+        Reset grippers to center position (500).
         """
-        rospy.loginfo("Resetting grippers to central position...")
+        rospy.loginfo("Resetting grippers to center position...")
         
-        # Reset gripper states to central position
+        # Reset gripper states to center position
         self.left_gripper_state = 0.5
         self.right_gripper_state = 0.5
         
-        # Send commands to central position (500)
+        # Send commands to center position (500)
         arm_msg = SetBusServosPosition()
         arm_msg.duration = 0.5
         
         positions = [
-            # BusServoPosition(id=21, position=500),   # Left gripper (DISABLED)
-            BusServoPosition(id=22, position=500)     # Right gripper centered
+            BusServoPosition(id=21, position=500),   # Left gripper at center
+            BusServoPosition(id=22, position=500)    # Right gripper at center
         ]
         
         arm_msg.position = positions
         self.arms_pub.publish(arm_msg)
-        rospy.loginfo("Grippers reset to central position (500)")
+        rospy.loginfo("Grippers reset to center position (500)")
     
     def calculate_hand_offset(self, current_pose, base_pose):
         """
@@ -621,7 +622,7 @@ class TeleopFetcher:
     
     def limit_servo_angles(self, angles, hand_side):
         """
-        Limit servo angles with specific bounds for each arm.
+        Limit servo angles to hand-specific bounds.
         
         Args:
             angles: dictionary of angles
@@ -676,59 +677,59 @@ class TeleopFetcher:
     
     def calculate_servo_angles(self, offset, hand_side):
         """
-        Calculate servo angles based on arm offset.
+        Calculate servo angles based on hand offset.
         
         Args:
-            offset: arm offset (x, y, z) in meters
+            offset: hand offset (x, y, z) in meters
             hand_side: 'left' or 'right'
             
         Returns:
             dict: angles for servos (0-1000)
         """
         # Improved inverse kinematics
-        # X -> shoulder forward-backward rotation (sho_pitch)
-        # Y -> shoulder up-down lift (sho_roll)
+        # X -> shoulder rotation forward-backward (sho_pitch)
+        # Y -> shoulder lift up-down (sho_roll)
         # Z -> forearm rotation (el_yaw)
         
         # Coefficients for converting offsets to angles (radians per meter)
         # 1 radian ≈ 57.3 degrees, 1000 units = 2π radians
-        scale_x = 200 * self.arm_sensitivity['x']  # X sensitivity
-        scale_y = 200 * self.arm_sensitivity['y']  # Y sensitivity  
-        scale_z = 100 * self.arm_sensitivity['z']  # Z sensitivity
+        scale_x = 200 * self.arm_sensitivity.get('x', 90)  # X sensitivity
+        scale_y = 200 * self.arm_sensitivity.get('y', 90)  # Y sensitivity
+        scale_z = 100 * self.arm_sensitivity.get('z', 90)  # Z sensitivity
         
-        # Debug information
+        # Debug info
         rospy.loginfo_throttle(2, 
             f"Kinematics {hand_side}: offset={offset}, scale_x={scale_x}, scale_y={scale_y}, scale_z={scale_z}"
         )
         
-        # Base positions (starting positions from configuration)
+        # Base positions (start positions from config)
         if hand_side == 'left':
-            base_sho_pitch = 874  # l_sho_pitch starting position
-            base_sho_roll = 833   # l_sho_roll starting position
-            base_el_pitch = 502   # l_el_pitch starting position
-            base_el_yaw = 44      # l_el_yaw starting position
+            base_sho_pitch = 874  # l_sho_pitch start position
+            base_sho_roll = 833   # l_sho_roll start position
+            base_el_pitch = 502   # l_el_pitch start position
+            base_el_yaw = 44      # l_el_yaw start position
         else:
-            base_sho_pitch = 126  # r_sho_pitch starting position
-            base_sho_roll = 167   # r_sho_roll starting position
-            base_el_pitch = 498   # r_el_pitch starting position
-            base_el_yaw = 956     # r_el_yaw starting position
+            base_sho_pitch = 126  # r_sho_pitch start position
+            base_sho_roll = 167   # r_sho_roll start position
+            base_el_pitch = 498   # r_el_pitch start position
+            base_el_yaw = 956     # r_el_yaw start position
         
         angles = {}
         
         if hand_side == 'left':
             # Left arm
             angles['sho_pitch'] = base_sho_pitch + int(offset['x'] * scale_x)  # l_sho_pitch
-            angles['sho_roll'] = base_sho_roll + int(offset['y'] * scale_y)     # l_sho_roll
+            angles['sho_roll'] = base_sho_roll + int(offset['y'] * scale_y)    # l_sho_roll
             angles['el_pitch'] = base_el_pitch  # l_el_pitch (not used yet)
-            angles['el_yaw'] = base_el_yaw + int(offset['z'] * scale_z)         # l_el_yaw
+            angles['el_yaw'] = base_el_yaw + int(offset['z'] * scale_z)        # l_el_yaw
         else:
             # Right arm (mirrored)
             angles['sho_pitch'] = base_sho_pitch - int(offset['x'] * scale_x)  # r_sho_pitch
-            angles['sho_roll'] = base_sho_roll - int(offset['y'] * scale_y)    # r_sho_roll
+            angles['sho_roll'] = base_sho_roll - int(offset['y'] * scale_y)   # r_sho_roll
             angles['el_pitch'] = base_el_pitch  # r_el_pitch (not used yet)
-            angles['el_yaw'] = base_el_yaw - int(offset['z'] * scale_z)        # r_el_yaw
+            angles['el_yaw'] = base_el_yaw - int(offset['z'] * scale_z)       # r_el_yaw
         
-        # Limit angles with specific bounds for each servo
+        # Limit angles to servo-specific bounds
         # ID15 (l_sho_roll): maximum 800
         if 'sho_roll' in angles and hand_side == 'left':
             angles['sho_roll'] = int(max(100, min(800, angles['sho_roll'])))
@@ -796,13 +797,13 @@ class TeleopFetcher:
         # Gripper control logic:
         # index = 1.0 -> close gripper (decrease angle)
         # grip = 1.0 -> open gripper (increase angle)
-        # If buttons are released, gripper stays in last position
+        # If buttons released, gripper stays in last position
         
-        # Left gripper (TEMPORARILY DISABLED - servo broken)
-        # if left_index > 0.5:  # Close
-        #     self.left_gripper_state = max(0.0, self.left_gripper_state - 0.1)
-        # elif left_grip > 0.5:  # Open
-        #     self.left_gripper_state = min(1.0, self.left_gripper_state + 0.1)
+        # Left gripper
+        if left_index > 0.5:  # Close
+            self.left_gripper_state = max(0.0, self.left_gripper_state - 0.1)
+        elif left_grip > 0.5:  # Open
+            self.left_gripper_state = min(1.0, self.left_gripper_state + 0.1)
         
         # Right gripper
         if right_index > 0.5:  # Close
@@ -811,23 +812,23 @@ class TeleopFetcher:
             self.right_gripper_state = min(1.0, self.right_gripper_state + 0.1)
         
         # Convert state to servo angles
-        # Central position = 500, limits ±200
+        # Center position = 500, limits ±200
         # Left gripper inverted: 0.0 = open (700), 1.0 = closed (300)
         # Right gripper: 0.0 = closed (300), 1.0 = open (700)
         left_gripper_pos = int(500 + (1.0 - self.left_gripper_state) * 200)  # Inverted
         right_gripper_pos = int(500 + self.right_gripper_state * 200)  # Normal
         
-        # Limit angles to ±200 from central position
+        # Limit angles to ±200 from center position
         left_gripper_pos = max(300, min(700, left_gripper_pos))
         right_gripper_pos = max(300, min(700, right_gripper_pos))
         
-        # Send gripper commands (left gripper TEMPORARILY DISABLED)
+        # Send commands to grippers
         arm_msg = SetBusServosPosition()
         arm_msg.duration = 0.1
         
         positions = [
-            # BusServoPosition(id=21, position=left_gripper_pos),   # Left gripper (DISABLED)
-            BusServoPosition(id=22, position=right_gripper_pos)  # Right gripper
+            BusServoPosition(id=21, position=left_gripper_pos),   # Left gripper
+            BusServoPosition(id=22, position=right_gripper_pos)   # Right gripper
         ]
         
         arm_msg.position = positions

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- Launch teleoperation node for Fetch robot -->
+  <!-- Launch Fetch robot teleoperation node -->
   <node name="teleop_fetch" pkg="teleop_fetch" type="fetcher.py" output="screen">
     <!-- Configuration parameters -->
     <param name="head_sensitivity" value="1.0" />
