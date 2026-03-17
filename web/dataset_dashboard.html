@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teleop Fetch Dataset Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "JetBrains Mono", monospace; background: #0d1117; color: #c9d1d9; }
+    header { padding: 14px 18px; border-bottom: 1px solid #30363d; background: #161b22; display: flex; gap: 12px; align-items: center; }
+    header h1 { margin: 0; font-size: 1rem; }
+    .grow { flex: 1; }
+    input { width: 100%; padding: 8px; border-radius: 6px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; }
+    button { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; background: #1f6feb; color: white; }
+    button.secondary { background: #21262d; }
+    main { padding: 14px; display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+    .card { border: 1px solid #30363d; border-radius: 8px; background: #161b22; padding: 12px; }
+    .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .stat { border: 1px solid #30363d; border-radius: 8px; padding: 10px; background: #0d1117; }
+    .k { font-size: 0.72rem; color: #8b949e; }
+    .v { font-size: 1.15rem; font-weight: 700; margin-top: 4px; }
+    .full { grid-column: 1 / -1; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    th, td { border-bottom: 1px solid #21262d; padding: 6px; text-align: left; }
+    .ok { color: #3fb950; font-weight: 700; }
+    .bad { color: #f85149; font-weight: 700; }
+    .actions button { margin-right: 6px; margin-bottom: 4px; }
+    .logs { width: 100%; min-height: 220px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 8px; font-size: 0.72rem; }
+    .chart-box { height: 240px; }
+    .chart-box canvas { width: 100% !important; height: 100% !important; }
+    .status { font-size: 0.78rem; color: #8b949e; margin-top: 6px; }
+    @media (max-width: 1100px) {
+      main { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dataset Dashboard</h1>
+    <div class="grow"></div>
+    <div style="min-width:300px;">
+      <input id="api-base" value="http://192.168.20.21:9191" placeholder="http://robot-ip:9191">
+    </div>
+    <div style="min-width:300px;">
+      <input id="data-node-url" value="http://192.168.20.166:8088" placeholder="http://data-node-ip:8088">
+    </div>
+    <div style="min-width:140px;">
+      <input id="upload-path" value="/sessions/upload" placeholder="/sessions/upload" title="DATA_NODE upload path">
+    </div>
+    <button id="btn-refresh">Refresh</button>
+    <button id="btn-refresh-logs" class="secondary">Logs</button>
+    <button id="btn-clear-all" class="secondary">Clear all local</button>
+    <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#8b949e;">
+      <input id="auto-refresh" type="checkbox" checked style="width:auto;margin:0;"> Auto refresh
+    </label>
+  </header>
+
+  <main>
+    <section class="card full">
+      <div class="stats">
+        <div class="stat"><div class="k">Total datasets</div><div class="v" id="s-total">0</div></div>
+        <div class="stat"><div class="k">Active dataset</div><div class="v" id="s-active">-</div></div>
+        <div class="stat"><div class="k">Robot-ready</div><div class="v" id="s-robot">0</div></div>
+        <div class="stat"><div class="k">Operator-ready</div><div class="v" id="s-operator">0</div></div>
+        <div class="stat"><div class="k">Stuck</div><div class="v" id="s-stuck">0</div></div>
+        <div class="stat"><div class="k">Uploaded</div><div class="v" id="s-uploaded">0</div></div>
+        <div class="stat"><div class="k">Upload failed</div><div class="v" id="s-upload-failed">0</div></div>
+        <div class="stat"><div class="k">Upload pending</div><div class="v" id="s-upload-pending">0</div></div>
+      </div>
+      <div class="status" id="status-line">Status: idle</div>
+    </section>
+
+    <section class="card">
+      <h3 style="margin-top:0">Dataset states</h3>
+      <div class="chart-box"><canvas id="chart-state"></canvas></div>
+    </section>
+    <section class="card">
+      <h3 style="margin-top:0">Durations</h3>
+      <div class="chart-box"><canvas id="chart-duration"></canvas></div>
+    </section>
+
+    <section class="card full">
+      <h3 style="margin-top:0">Datasets</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Dataset ID</th><th>Task</th><th>Label</th><th>Duration</th><th>Robot</th><th>Operator</th><th>State</th><th>Upload</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+
+    <section class="card full">
+      <h3 style="margin-top:0">Server logs</h3>
+      <textarea id="logs" class="logs" readonly></textarea>
+    </section>
+  </main>
+
+  <script>
+    let chartState = null;
+    let chartDuration = null;
+    let lastDatasetsDigest = '';
+    let autoRefreshTimer = null;
+
+    function apiBase() { return (document.getElementById('api-base').value || '').replace(/\/+$/, ''); }
+    function dataNodeUrl() { return (document.getElementById('data-node-url').value || '').replace(/\/+$/, ''); }
+    function uploadPath() { return (document.getElementById('upload-path')?.value || '/sessions/upload').trim() || '/sessions/upload'; }
+
+    async function refreshStatus() {
+      const status = document.getElementById('status-line');
+      status.textContent = 'Status: loading...';
+      try {
+        const resp = await fetch(`${apiBase()}/dataset_status`);
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'ok') throw new Error(data.message || `HTTP ${resp.status}`);
+        const datasets = data.datasets || [];
+        renderSummary(data.summary || {}, datasets);
+        const digest = JSON.stringify(
+          datasets.map((d) => [
+            d.datasetId, d.taskName, d.label, d.durationSec, d.robotReady, d.operatorReady,
+            d.stuck, d.uploadOnly, d.uploadStatus, d.uploadLastError, d.updatedUnixNs
+          ])
+        );
+        if (digest !== lastDatasetsDigest) {
+          renderTable(datasets);
+          renderCharts(datasets);
+          lastDatasetsDigest = digest;
+        }
+        status.textContent = `Status: loaded ${datasets.length} datasets`;
+      } catch (e) {
+        status.textContent = `Status: error (${e.message || e})`;
+      }
+    }
+
+    function renderSummary(summary, datasets) {
+      const stuck = datasets.filter((d) => d.stuck).length;
+      document.getElementById('s-total').textContent = String(summary.totalDatasets ?? 0);
+      document.getElementById('s-active').textContent = summary.activeDatasetId || '-';
+      document.getElementById('s-robot').textContent = String(summary.robotReadyCount ?? 0);
+      document.getElementById('s-operator').textContent = String(summary.operatorReadyCount ?? 0);
+      document.getElementById('s-stuck').textContent = String(stuck);
+      document.getElementById('s-uploaded').textContent = String(summary.uploadedCount ?? 0);
+      document.getElementById('s-upload-failed').textContent = String(summary.uploadFailedCount ?? 0);
+      document.getElementById('s-upload-pending').textContent = String(summary.uploadPendingCount ?? 0);
+    }
+
+    function renderTable(datasets) {
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      for (const ds of datasets) {
+        const tr = document.createElement('tr');
+        const state = ds.stuck ? 'STUCK' : (ds.uploadOnly ? 'UPLOAD_ONLY' : 'OK');
+        const uploadStatus = ds.uploadStatus || 'pending';
+        const canRepush = uploadStatus !== 'uploaded';
+        tr.innerHTML = `
+          <td title="${ds.datasetId}">${ds.datasetId.slice(0, 20)}${ds.datasetId.length > 20 ? '...' : ''}</td>
+          <td>${ds.taskName || ''}</td>
+          <td>${ds.label || ''}</td>
+          <td>${Number(ds.durationSec || 0).toFixed(2)}s</td>
+          <td class="${ds.robotReady ? 'ok' : 'bad'}">${ds.robotReady ? 'READY' : 'NO'}</td>
+          <td class="${ds.operatorReady ? 'ok' : 'bad'}">${ds.operatorReady ? 'READY' : 'NO'}</td>
+          <td class="${ds.stuck ? 'bad' : 'ok'}">${state}</td>
+          <td class="${uploadStatus === 'uploaded' ? 'ok' : (uploadStatus === 'failed' ? 'bad' : '')}">${uploadStatus.toUpperCase()}</td>
+          <td class="actions">
+            <button class="secondary" data-act="download" data-id="${ds.datasetId}">Download</button>
+            ${canRepush ? `<button class="secondary" data-act="push" data-id="${ds.datasetId}">${uploadStatus === 'pending' ? 'Push' : 'Re-push'}</button>` : ''}
+            <button class="secondary" data-act="delete" data-id="${ds.datasetId}">Delete</button>
+          </td>`;
+        tbody.appendChild(tr);
+      }
+      tbody.querySelectorAll('button[data-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          const act = btn.getAttribute('data-act');
+          if (act === 'download') downloadDataset(id);
+          if (act === 'push') pushDataset(id);
+          if (act === 'delete') deleteDataset(id);
+        });
+      });
+    }
+
+    function renderCharts(datasets) {
+      const ok = datasets.filter((d) => !d.uploadOnly && !d.stuck).length;
+      const uploadOnly = datasets.filter((d) => d.uploadOnly && !d.stuck).length;
+      const stuck = datasets.filter((d) => d.stuck).length;
+      const labels = datasets.map((d) => d.datasetId.slice(0, 10));
+      const durations = datasets.map((d) => Number(d.durationSec || 0));
+
+      const ctx1 = document.getElementById('chart-state').getContext('2d');
+      if (chartState) chartState.destroy();
+      chartState = new Chart(ctx1, {
+        type: 'doughnut',
+        data: {
+          labels: ['OK', 'UPLOAD_ONLY', 'STUCK'],
+          datasets: [{ data: [ok, uploadOnly, stuck], backgroundColor: ['#3fb950', '#1f6feb', '#f85149'] }]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#c9d1d9' } } }
+        }
+      });
+
+      const ctx2 = document.getElementById('chart-duration').getContext('2d');
+      if (chartDuration) chartDuration.destroy();
+      chartDuration = new Chart(ctx2, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Duration (s)', data: durations, backgroundColor: '#58a6ff' }] },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: '#c9d1d9' }, grid: { color: '#30363d' } },
+            y: { ticks: { color: '#c9d1d9' }, grid: { color: '#30363d' } }
+          },
+          plugins: { legend: { labels: { color: '#c9d1d9' } } }
+        }
+      });
+    }
+
+    async function refreshLogs() {
+      const area = document.getElementById('logs');
+      area.value = 'Loading logs...\n';
+      try {
+        const resp = await fetch(`${apiBase()}/dataset_logs?lines=300`);
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'ok') throw new Error(data.message || `HTTP ${resp.status}`);
+        const lines = [];
+        for (const [name, rows] of Object.entries(data.logs || {})) {
+          lines.push(`===== ${name} =====`);
+          for (const row of rows) lines.push(row);
+          lines.push('');
+        }
+        area.value = lines.join('\n') || 'No logs.';
+      } catch (e) {
+        area.value = `Failed to load logs: ${e.message || e}`;
+      }
+    }
+
+    function downloadDataset(datasetId) {
+      window.open(`${apiBase()}/dataset_download/${encodeURIComponent(datasetId)}`, '_blank');
+    }
+
+    async function deleteDataset(datasetId) {
+      if (!confirm(`Delete ${datasetId}?`)) return;
+      const resp = await fetch(`${apiBase()}/dataset_delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datasetId })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.status !== 'ok') {
+        alert(`Delete failed: ${data.message || resp.status}`);
+        return;
+      }
+      await refreshStatus();
+      await refreshLogs();
+    }
+
+    async function pushDataset(datasetId) {
+      const resp = await fetch(`${apiBase()}/dataset_push`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datasetId, dataNodeUrl: dataNodeUrl(), uploadPath: uploadPath() })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.status !== 'ok') {
+        alert(`Push failed: ${data.message || resp.status}`);
+      } else {
+        alert(`Push done: ${datasetId}`);
+      }
+      await refreshLogs();
+    }
+
+    async function clearAll() {
+      if (!confirm('Delete ALL local datasets, logs, inbox and cache files?')) return;
+      const resp = await fetch(`${apiBase()}/dataset_clear_all`, { method: 'POST' });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.status !== 'ok') {
+        alert(`Clear failed: ${data.message || resp.status}`);
+        return;
+      }
+      await refreshStatus();
+      await refreshLogs();
+    }
+
+    document.getElementById('btn-refresh').addEventListener('click', refreshStatus);
+    document.getElementById('btn-refresh-logs').addEventListener('click', refreshLogs);
+    document.getElementById('btn-clear-all').addEventListener('click', clearAll);
+    function setupAutoRefresh() {
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+      if (document.getElementById('auto-refresh').checked) {
+        autoRefreshTimer = setInterval(refreshStatus, 15000);
+      }
+    }
+    document.getElementById('auto-refresh').addEventListener('change', setupAutoRefresh);
+    setupAutoRefresh();
+    refreshStatus();
+    refreshLogs();
+  </script>
+</body>
+</html>

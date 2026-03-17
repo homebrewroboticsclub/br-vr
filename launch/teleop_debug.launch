@@ -1,0 +1,15 @@
+<launch>
+  <!-- Teleop with RViz for debugging operator/robot correspondence -->
+  <arg name="use_rviz" default="true" />
+  <arg name="use_gui" default="false" />
+  <arg name="enable_dataset_recording" default="true" />
+
+  <include file="$(find teleop_fetch)/launch/teleop.launch">
+    <arg name="use_rviz" value="$(arg use_rviz)" />
+    <arg name="use_gui" value="$(arg use_gui)" />
+    <arg name="enable_dataset_recording" value="$(arg enable_dataset_recording)" />
+  </include>
+
+  <!-- RViz shows: robot model, /visualization_marker (IK targets from fast_ik) -->
+  <!-- Frame: body_link. Markers = target hand positions after transform -->
+</launch>

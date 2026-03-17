@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VR Teleop Debug - Robot & Operator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', 'Fira Code', monospace; margin: 0; background: #0d1117; color: #c9d1d9; }
+    .layout { display: grid; grid-template-columns: 320px 1fr; grid-template-rows: auto 1fr; gap: 0; min-height: 100vh; }
+    header { grid-column: 1/-1; padding: 12px 20px; background: #161b22; border-bottom: 1px solid #30363d; }
+    header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+    aside { padding: 16px; background: #161b22; border-right: 1px solid #30363d; overflow-y: auto; }
+    main { padding: 16px; position: relative; }
+    .panel { margin-bottom: 20px; }
+    .panel h3 { margin: 0 0 10px; font-size: 0.9rem; color: #8b949e; }
+    label { display: block; margin-bottom: 4px; font-size: 0.8rem; }
+    input, select { width: 100%; padding: 6px 8px; background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #c9d1d9; margin-bottom: 8px; }
+    button { padding: 8px 14px; background: #238636; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 0.85rem; }
+    button:hover { background: #2ea043; }
+    button.secondary { background: #21262d; }
+    button.secondary:hover { background: #30363d; }
+    button.active { background: #1f6feb; }
+    .status { padding: 8px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 12px; }
+    .status.connected { background: #23863633; border: 1px solid #238636; }
+    .status.disconnected { background: #da363333; border: 1px solid #da3633; }
+    #canvas-container { width: 100%; height: 100%; min-height: 500px; border-radius: 8px; background: #0d1117; border: 1px solid #30363d; }
+    .manual-hint { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 8px 16px; background: #238636; color: white; border-radius: 6px; font-size: 0.9rem; z-index: 10; }
+    .sphere-label { position: fixed; padding: 2px 6px; background: rgba(0,0,0,0.8); color: white; font-size: 12px; font-weight: bold; border-radius: 4px; pointer-events: none; z-index: 5; display: none; }
+    .robot-orient { position: absolute; bottom: 12px; left: 12px; padding: 6px 10px; background: rgba(0,0,0,0.85); color: #8b949e; font-size: 11px; border-radius: 4px; z-index: 5; }
+    .coords { font-size: 0.75rem; font-family: monospace; color: #8b949e; }
+    .mode-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .mode-row button { flex: 1; }
+    .grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { border: 1px solid #30363d; border-radius: 6px; padding: 8px; background: #0d1117; }
+    .stat .k { color: #8b949e; font-size: 0.72rem; }
+    .stat .v { font-size: 1rem; font-weight: 700; margin-top: 2px; }
+    .table-wrap { max-height: 220px; overflow: auto; border: 1px solid #30363d; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+    th, td { border-bottom: 1px solid #21262d; padding: 6px; text-align: left; }
+    .ok { color: #3fb950; font-weight: 700; }
+    .bad { color: #f85149; font-weight: 700; }
+    .log-box { width: 100%; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 8px; border-radius: 6px; font-size: 0.72rem; min-height: 180px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header>
+      <h1>VR Teleop Debug — Operator & Manual Control</h1>
+    </header>
+    <aside>
+      <div class="panel">
+        <h3>Rosbridge</h3>
+        <label>WebSocket URL</label>
+        <input type="text" id="ws-url" value="ws://192.168.20.21:9090" placeholder="ws://host:9090">
+        <button id="btn-connect">Connect</button>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <button id="btn-open-dataset-dashboard" class="secondary">Open dataset dashboard (full screen)</button>
+      </div>
+      <div class="panel" style="display:none; border: 1px solid #1f6feb;">
+        <h3>Dataset dashboard (robot)</h3>
+        <label>Dataset API base URL</label>
+        <input type="text" id="dataset-api-base" value="http://192.168.20.21:9191" placeholder="http://robot-ip:9191">
+        <label>DATA_NODE upload URL</label>
+        <input type="text" id="data-node-url" value="http://192.168.20.166:8088" placeholder="http://data-node-ip:8088">
+        <label>DATA_NODE upload path</label>
+        <input type="text" id="data-node-upload-path" value="/sessions/upload" placeholder="/sessions/upload">
+        <div class="mode-row">
+          <button id="btn-dataset-refresh" class="secondary">Refresh status</button>
+          <button id="btn-dataset-logs" class="secondary">Refresh logs</button>
+        </div>
+        <div class="grid-stats">
+          <div class="stat"><div class="k">Total datasets</div><div id="ds-total" class="v">0</div></div>
+          <div class="stat"><div class="k">Active dataset</div><div id="ds-active" class="v">-</div></div>
+          <div class="stat"><div class="k">Robot-ready</div><div id="ds-robot-ready" class="v">0</div></div>
+          <div class="stat"><div class="k">Operator-ready</div><div id="ds-operator-ready" class="v">0</div></div>
+        </div>
+        <div class="coords" id="ds-refresh-status" style="margin:8px 0;">Status: idle</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Dataset ID</th>
+                <th>Task</th>
+                <th>Label</th>
+                <th>Robot</th>
+                <th>Operator</th>
+                <th>State</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dataset-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel" style="display:none;">
+        <h3>Dataset logs (robot)</h3>
+        <textarea id="dataset-logs" class="log-box" readonly></textarea>
+      </div>
+      <div class="panel">
+        <h3>Pose source</h3>
+        <div class="mode-row">
+          <button id="mode-vr" class="active">VR (operator)</button>
+          <button id="mode-manual" class="secondary">Manual (drag)</button>
+        </div>
+        <div class="coords" id="mode-status">VR: poses from /quest/poses</div>
+      </div>
+      <div class="panel" id="xy-panel" style="display:none">
+        <h3>Start/Stop (X/Y emulation)</h3>
+        <div class="mode-row">
+          <button id="btn-x" class="secondary" title="X = enable arm control">X Start</button>
+          <button id="btn-y" class="secondary" title="Y = disable, arms to start pose">Y Stop</button>
+        </div>
+        <div class="coords" id="xy-status">Press X to enable</div>
+      </div>
+      <div class="panel" style="border: 2px solid #238636;">
+        <h3>Calibration + Scale</h3>
+        <div class="coords" style="font-size:0.7rem; color:#8b949e; margin-bottom:6px;">Bring hands to natural position (in front, slightly lower), press R_A on right joystick.</div>
+        <label><strong>SCALE</strong> (sensitivity 0.0001..100, live update)</label>
+        <input type="number" id="scale" value="0.25" min="0.0001" max="100" step="0.01">
+      </div>
+      <div class="panel">
+        <h3>Controller remapping (VR only)</h3>
+        <label>Quest → body_link, applies only to joystick data (manual unaffected)</label>
+        <select id="axis-mapping-robot">
+          <option value="xy" selected>xy (x=-y, y=-x, z=z) — working</option>
+          <option value="none">none (no remap)</option>
+          <option value="xz">xz</option>
+          <option value="yz">yz</option>
+          <option value="swap_yz">swap Y↔Z</option>
+          <option value="swap_xz">swap X↔Z</option>
+          <option value="inv_y">inv_y (y=-y)</option>
+          <option value="inv_z">inv_z (z=-z)</option>
+          <option value="inv_yz">inv_yz (y=-y, z=-z)</option>
+        </select>
+        <div class="coords" style="margin-top:8px; font-size:0.75rem; color:#8b949e;">Swap Y↔Z=OFF: xy with swap (-y,z,-x). ON: legacy xy (-y,-x,z)</div>
+        <label><input type="checkbox" id="post-swap-yz"> Swap Y↔Z (restore legacy mapping)</label>
+        <label><input type="checkbox" id="post-inv-y"> Invert Y</label>
+        <label><input type="checkbox" id="post-inv-z"> Invert Z</label>
+        <label><input type="checkbox" id="post-swap-right-only" title="Swap right hand only (if asymmetric)"> Swap right only</label>
+      </div>
+      <div class="panel">
+        <h3>Display axes</h3>
+        <label>body_link → Three.js (visualization)</label>
+        <select id="axis-map">
+          <option value="ros_xyz" selected>Robot: X forward, Y left, Z up</option>
+          <option value="identity">Identity (may lie on side)</option>
+          <option value="ros_zup">ROS Z-up → Y-up</option>
+          <option value="ros_swap">Swap Y↔Z</option>
+        </select>
+      </div>
+      <div class="panel">
+        <h3>Robot Scale (details)</h3>
+        <label>neck_offset</label>
+        <input type="number" id="neck-offset" value="0.25" step="0.01">
+        <label>big_head_x_offset</label>
+        <input type="number" id="head-x" value="0.15" step="0.01">
+        <label>robot_z_offset</label>
+        <input type="number" id="robot-z" value="0.087448" step="0.001">
+      </div>
+      <div class="panel">
+        <h3>Operator (raw /quest/poses)</h3>
+        <div class="coords" style="margin-bottom:2px; color:#6e7681;">Quest frame: X Y Z</div>
+        <div class="coords" id="op-head">Head: X=— Y=— Z=—</div>
+        <div class="coords" id="op-left">Left: X=— Y=— Z=—</div>
+        <div class="coords" id="op-right">Right: X=— Y=— Z=—</div>
+      </div>
+      <div class="panel">
+        <h3>Robot target (body_link)</h3>
+        <div class="coords" style="margin-bottom:2px; color:#6e7681;">body_link: X forward, Y left, Z up</div>
+        <div class="coords" id="tgt-left">Left: X=— Y=— Z=—</div>
+        <div class="coords" id="tgt-right">Right: X=— Y=— Z=—</div>
+      </div>
+      <div class="panel">
+        <h3>Workspace zones</h3>
+        <label><input type="checkbox" id="show-workspace"> Show workspace zones (max_reach 0.25 m)</label>
+      </div>
+      <div class="panel">
+        <h3>Legend</h3>
+        <div class="coords">Red = operator left hand (VR)</div>
+        <div class="coords">Blue = operator right hand (VR)</div>
+        <div class="coords"><strong>Cyan = left arm, Orange = right — drag in Manual</strong></div>
+        <div class="coords">Gray lines = shoulder → target</div>
+      </div>
+      <div class="panel">
+        <h3>Export settings</h3>
+        <button id="btn-export">Copy settings</button>
+        <textarea id="export-output" readonly rows="12" style="width:100%; margin-top:8px; font-size:0.75rem; background:#0d1117; border:1px solid #30363d; color:#c9d1d9; padding:8px;"></textarea>
+      </div>
+    </aside>
+    <main>
+      <div id="manual-hint" class="manual-hint" style="display:none">LMB — drag spheres. RMB — rotate view.</div>
+      <div id="robot-orient" class="robot-orient">body_link: X forward | Y left | Z up. Axes: Red=X, Green=Y, Blue=Z</div>
+      <div id="axis-legend" class="robot-orient" style="bottom:auto; top:60px; left:12px;">body_link: X fwd/back, Y left/right, Z up/down. In scene: Green=Z(up)</div>
+      <div id="label-left" class="sphere-label">L</div>
+      <div id="label-right" class="sphere-label">R</div>
+      <div id="canvas-container"></div>
+    </main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+  <script>
+    let ros = null;
+    let scene, camera, renderer, controls;
+    let opLeftMesh, opRightMesh, tgtLeftMesh, tgtRightMesh;
+    let leftArmLine, rightArmLine;
+    let robotSchematic, schematicBody, schematicHead;
+    let leftWorkspaceMesh, rightWorkspaceMesh;
+    let hasDebugTargets = false;
+    let manualMode = false;
+    let manualPosePub = null;
+    let poseModePub = null;
+    let jointsPub = null;
+    let scalePub = null;
+    let xyXPressed = false;
+    let xyYPressed = false;
+    let manualPublishInterval = null;
+    let lastQuestPoses = null;
+    let dragTarget = null;
+    let raycaster, mouse, plane, planeNormal, intersectPoint;
+    let tgtLeftBodyLink = { x: 0, y: 0, z: 0 };
+    let tgtRightBodyLink = { x: 0, y: 0, z: 0 };
+
+    // body_link frame: left shoulder ~(0, 0.0525, 0.087), right ~(0, -0.0525, 0.087)
+    const L_SHOULDER = { x: 0, y: 0.0525, z: 0.087 };
+    const R_SHOULDER = { x: 0, y: -0.0525, z: 0.087 };
+    // T-pose: arms extended sideways (robot_arm_length ~0.2)
+    const T_POSE_LEFT = { x: 0, y: 0.0525 + 0.2, z: 0.087 };
+    const T_POSE_RIGHT = { x: 0, y: -0.0525 - 0.2, z: 0.087 };
+
+    function init3D() {
+      const container = document.getElementById('canvas-container');
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.01, 50);
+      camera.position.set(0.4, 0.3, 0.6);
+      camera.lookAt(0, 0, 0.1);
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(renderer.domElement);
+
+      if (typeof THREE.OrbitControls !== 'undefined') {
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+      }
+
+      const grid = new THREE.GridHelper(0.5, 20, 0x444444, 0x222222);
+      scene.add(grid);
+      const axes = new THREE.AxesHelper(0.15);
+      scene.add(axes);
+      // Axis labels (Three.js: Red=X, Green=Y, Blue=Z)
+      const makeLabel = (text, color) => {
+        const c = document.createElement('canvas');
+        c.width = 64; c.height = 64;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = color;
+        ctx.font = 'bold 48px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 32, 32);
+        const tex = new THREE.CanvasTexture(c);
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+        const s = new THREE.Sprite(mat);
+        s.scale.set(0.06, 0.06, 1);
+        return s;
+      };
+      const lblX = makeLabel('X', '#ff4444');
+      lblX.position.set(0.2, 0, 0);
+      scene.add(lblX);
+      const lblY = makeLabel('Y', '#44ff44');
+      lblY.position.set(0, 0.2, 0);
+      scene.add(lblY);
+      const lblZ = makeLabel('Z', '#4444ff');
+      lblZ.position.set(0, 0, 0.2);
+      scene.add(lblZ);
+
+      // Robot orientation schematic (body_link: face +X, left +Y, up +Z) — does not overlap arms
+      robotSchematic = new THREE.Group();
+      const bodyGeo = new THREE.BoxGeometry(0.04, 0.05, 0.03);
+      const bodyMat = new THREE.MeshBasicMaterial({ color: 0x666666 });
+      schematicBody = new THREE.Mesh(bodyGeo, bodyMat);
+      robotSchematic.add(schematicBody);
+      const headGeo = new THREE.BoxGeometry(0.02, 0.02, 0.02);
+      const headMat = new THREE.MeshBasicMaterial({ color: 0x888888 });
+      schematicHead = new THREE.Mesh(headGeo, headMat);
+      robotSchematic.add(schematicHead);
+      scene.add(robotSchematic);
+
+      // Workspace spheres (max_reach 0.25 m from each shoulder)
+      const MAX_REACH = 0.25;
+      const wsGeo = new THREE.SphereGeometry(MAX_REACH, 24, 24);
+      leftWorkspaceMesh = new THREE.Mesh(wsGeo, new THREE.MeshBasicMaterial({
+        color: 0x00ccff, transparent: true, opacity: 0.12, side: THREE.DoubleSide
+      }));
+      rightWorkspaceMesh = new THREE.Mesh(wsGeo, new THREE.MeshBasicMaterial({
+        color: 0xff9900, transparent: true, opacity: 0.12, side: THREE.DoubleSide
+      }));
+      const lw3 = bodyLinkToThree(L_SHOULDER.x, L_SHOULDER.y, L_SHOULDER.z);
+      const rw3 = bodyLinkToThree(R_SHOULDER.x, R_SHOULDER.y, R_SHOULDER.z);
+      leftWorkspaceMesh.position.set(lw3.x, lw3.y, lw3.z);
+      rightWorkspaceMesh.position.set(rw3.x, rw3.y, rw3.z);
+      scene.add(leftWorkspaceMesh);
+      scene.add(rightWorkspaceMesh);
+
+      // Arm lines (shoulder -> target)
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x888888 });
+      leftArmLine = new THREE.Line(new THREE.BufferGeometry(), lineMat);
+      rightArmLine = new THREE.Line(new THREE.BufferGeometry(), lineMat);
+      scene.add(leftArmLine);
+      scene.add(rightArmLine);
+
+      const geoOp = new THREE.SphereGeometry(0.025, 16, 16);
+      const geoTgt = new THREE.SphereGeometry(0.03, 16, 16);  // larger for easier drag
+      opLeftMesh = new THREE.Mesh(geoOp, new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.7 }));
+      opRightMesh = new THREE.Mesh(geoOp, new THREE.MeshBasicMaterial({ color: 0x4444ff, transparent: true, opacity: 0.7 }));
+      tgtLeftMesh = new THREE.Mesh(geoTgt, new THREE.MeshBasicMaterial({ color: 0x00ccff }));   // cyan = left
+      tgtRightMesh = new THREE.Mesh(geoTgt, new THREE.MeshBasicMaterial({ color: 0xff9900 }));  // orange = right
+      tgtLeftMesh.userData = { hand: 'left' };
+      tgtRightMesh.userData = { hand: 'right' };
+      scene.add(tgtLeftMesh); scene.add(tgtRightMesh);
+      scene.add(opLeftMesh); scene.add(opRightMesh);
+      opLeftMesh.visible = opRightMesh.visible = tgtLeftMesh.visible = tgtRightMesh.visible = false;
+
+      // Drag setup
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+      plane = new THREE.Plane();
+      planeNormal = new THREE.Vector3(0, 0, 1);
+      intersectPoint = new THREE.Vector3();
+
+      const canvas = renderer.domElement;
+      canvas.addEventListener('pointerdown', onPointerDown, true);
+      window.addEventListener('pointermove', onMouseMove);
+      window.addEventListener('pointerup', onMouseUp);
+      window.addEventListener('pointercancel', onMouseUp);
+
+      tgtLeftBodyLink = { x: T_POSE_LEFT.x, y: T_POSE_LEFT.y, z: T_POSE_LEFT.z };
+      tgtRightBodyLink = { x: T_POSE_RIGHT.x, y: T_POSE_RIGHT.y, z: T_POSE_RIGHT.z };
+      applyAxisMapToTargets();
+      updateArmLines();
+
+      window.addEventListener('resize', () => {
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+      });
+      animate();
+    }
+
+    function applyAxisMapToTargets() {
+      const l3 = bodyLinkToThree(tgtLeftBodyLink.x, tgtLeftBodyLink.y, tgtLeftBodyLink.z);
+      const r3 = bodyLinkToThree(tgtRightBodyLink.x, tgtRightBodyLink.y, tgtRightBodyLink.z);
+      tgtLeftMesh.position.set(l3.x, l3.y, l3.z);
+      tgtRightMesh.position.set(r3.x, r3.y, r3.z);
+      if (schematicBody && schematicHead) {
+        const b3 = bodyLinkToThree(0, 0, 0.015);
+        const h3 = bodyLinkToThree(0.04, 0, 0.03);
+        schematicBody.position.set(b3.x, b3.y, b3.z);
+        schematicHead.position.set(h3.x, h3.y, h3.z);
+      }
+      if (leftWorkspaceMesh && rightWorkspaceMesh) {
+        const lw3 = bodyLinkToThree(L_SHOULDER.x, L_SHOULDER.y, L_SHOULDER.z);
+        const rw3 = bodyLinkToThree(R_SHOULDER.x, R_SHOULDER.y, R_SHOULDER.z);
+        leftWorkspaceMesh.position.set(lw3.x, lw3.y, lw3.z);
+        rightWorkspaceMesh.position.set(rw3.x, rw3.y, rw3.z);
+      }
+    }
+
+    function updateArmLines() {
+      const l3 = bodyLinkToThree(L_SHOULDER.x, L_SHOULDER.y, L_SHOULDER.z);
+      const r3 = bodyLinkToThree(R_SHOULDER.x, R_SHOULDER.y, R_SHOULDER.z);
+      leftArmLine.geometry.setFromPoints([
+        new THREE.Vector3(l3.x, l3.y, l3.z),
+        tgtLeftMesh.position.clone()
+      ]);
+      rightArmLine.geometry.setFromPoints([
+        new THREE.Vector3(r3.x, r3.y, r3.z),
+        tgtRightMesh.position.clone()
+      ]);
+      leftArmLine.geometry.attributes.position.needsUpdate = true;
+      rightArmLine.geometry.attributes.position.needsUpdate = true;
+    }
+
+    function onPointerDown(e) {
+      if (!manualMode) return;
+      if (e.button === 2) {
+        if (controls) {
+          controls.enabled = true;
+          controls.mouseButtons.LEFT = null;
+          controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+        }
+        return;
+      }
+      if (e.button !== 0 || !ros || !ros.isConnected) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const meshes = [tgtLeftMesh, tgtRightMesh];
+      const hits = raycaster.intersectObjects(meshes);
+      if (hits.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        renderer.domElement.setPointerCapture && renderer.domElement.setPointerCapture(e.pointerId);
+        dragTarget = hits[0].object;
+        setSphereHighlight(dragTarget, true);
+        planeNormal.copy(camera.position).sub(dragTarget.position).normalize();
+        plane.setFromNormalAndCoplanarPoint(planeNormal, dragTarget.position);
+      }
+    }
+
+    function onMouseMove(e) {
+      if (!dragTarget) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      raycaster.ray.intersectPlane(plane, intersectPoint);
+      if (intersectPoint) {
+        dragTarget.position.copy(intersectPoint);
+        const body = threeToBodyLink(intersectPoint.x, intersectPoint.y, intersectPoint.z);
+        if (dragTarget.userData.hand === 'left') tgtLeftBodyLink = body;
+        else tgtRightBodyLink = body;
+      }
+      updateArmLines();
+      publishManualPoses();
+    }
+
+    function onMouseUp(e) {
+      if (e && e.button === 2 && controls) {
+        controls.enabled = false;
+        controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+        controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+      }
+      if (dragTarget) setSphereHighlight(dragTarget, false);
+      dragTarget = null;
+    }
+
+    function setSphereHighlight(mesh, on) {
+      if (!mesh || !mesh.material) return;
+      mesh.material.color.setHex(on ? 0xffff00 : (mesh.userData.hand === 'left' ? 0x00ccff : 0xff9900));
+      mesh.scale.setScalar(on ? 1.3 : 1);
+    }
+
+    function publishManualPoses() {
+      if (!manualPosePub || !ros || !ros.isConnected) return;
+      const leftBody = tgtLeftBodyLink;
+      const rightBody = tgtRightBodyLink;
+      const headPos = lastQuestPoses?.poses?.[0]?.position || { x: 0, y: 0, z: 0 };
+      const msg = {
+        header: { frame_id: 'body_link', stamp: { secs: 0, nsecs: 0 } },
+        poses: [
+          { position: headPos, orientation: { x: 0, y: 0, z: 0, w: 1 } },
+          { position: leftBody, orientation: { x: 0, y: 0, z: 0, w: 1 } },
+          { position: rightBody, orientation: { x: 0, y: 0, z: 0, w: 1 } }
+        ]
+      };
+      manualPosePub.publish(msg);
+    }
+
+    const labelLeftEl = () => document.getElementById('label-left');
+    const labelRightEl = () => document.getElementById('label-right');
+    const vec = new THREE.Vector3();
+
+    function updateLabels() {
+      const ll = labelLeftEl(), lr = labelRightEl();
+      if (!ll || !lr) return;
+      if (!manualMode || !tgtLeftMesh.visible || !tgtRightMesh.visible) {
+        ll.style.display = lr.style.display = 'none';
+        return;
+      }
+      const rect = renderer.domElement.getBoundingClientRect();
+      vec.copy(tgtLeftMesh.position).project(camera);
+      if (vec.z <= 1) {
+        ll.style.display = 'block';
+        ll.style.left = (rect.left + (vec.x * 0.5 + 0.5) * rect.width - 10) + 'px';
+        ll.style.top = (rect.top + (1 - (vec.y * 0.5 + 0.5)) * rect.height - 10) + 'px';
+      } else ll.style.display = 'none';
+      vec.copy(tgtRightMesh.position).project(camera);
+      if (vec.z <= 1) {
+        lr.style.display = 'block';
+        lr.style.left = (rect.left + (vec.x * 0.5 + 0.5) * rect.width - 10) + 'px';
+        lr.style.top = (rect.top + (1 - (vec.y * 0.5 + 0.5)) * rect.height - 10) + 'px';
+      } else lr.style.display = 'none';
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      applyAxisMapToTargets();
+      const showWs = document.getElementById('show-workspace')?.checked ?? false;
+      if (leftWorkspaceMesh) leftWorkspaceMesh.visible = showWs;
+      if (rightWorkspaceMesh) rightWorkspaceMesh.visible = showWs;
+      if (controls) controls.update();
+      updateLabels();
+      renderer.render(scene, camera);
+    }
+
+    function bodyLinkToThree(x, y, z) {
+      const mode = document.getElementById('axis-map')?.value || 'identity';
+      if (mode === 'ros_zup') return { x, y: z, z: y };
+      if (mode === 'ros_swap') return { x, y: z, z: -y };
+      if (mode === 'ros_xyz') return { x: -y, y: z, z: -x };
+      return { x, y, z };
+    }
+
+    function threeToBodyLink(x, y, z) {
+      const mode = document.getElementById('axis-map')?.value || 'identity';
+      if (mode === 'ros_zup') return { x, y: z, z: y };
+      if (mode === 'ros_swap') return { x, y: -z, z: y };
+      if (mode === 'ros_xyz') return { x: -z, y: -x, z: y };
+      return { x, y, z };
+    }
+
+    function scalePose(x, y, z, isLeft) {
+      const scale = parseFloat(document.getElementById('scale')?.value || 0.25);
+      const [bx, by, bz] = [z, -x, y];  // map as in vr_remapper
+      const body = { x: bx * scale, y: by * scale, z: bz * scale };
+      return bodyLinkToThree(body.x, body.y, body.z);
+    }
+
+    function connect() {
+      const url = document.getElementById('ws-url').value;
+      const inferredApi = inferDatasetApiBase(url);
+      const apiEl = document.getElementById('dataset-api-base');
+      if (apiEl && (!apiEl.value || apiEl.value.includes('192.168.20.21'))) {
+        apiEl.value = inferredApi;
+      }
+      if (ros) ros.close();
+      ros = new ROSLIB.Ros({ url });
+      ros.on('connection', () => {
+        document.getElementById('status').textContent = 'Connected';
+        document.getElementById('status').className = 'status connected';
+        subscribe();
+      });
+      ros.on('error', (e) => {
+        document.getElementById('status').textContent = 'Error: ' + (e.message || e);
+        document.getElementById('status').className = 'status disconnected';
+      });
+      ros.on('close', () => {
+        document.getElementById('status').textContent = 'Disconnected';
+        document.getElementById('status').className = 'status disconnected';
+      });
+    }
+
+    function inferDatasetApiBase(wsUrl) {
+      try {
+        const u = new URL(wsUrl);
+        return `http://${u.hostname}:9191`;
+      } catch (_) {
+        return 'http://192.168.20.21:9191';
+      }
+    }
+
+    async function refreshDatasetStatus() {
+      const base = (document.getElementById('dataset-api-base')?.value || '').replace(/\/+$/, '');
+      const statusEl = document.getElementById('ds-refresh-status');
+      statusEl.textContent = 'Status: loading dataset status...';
+      try {
+        const resp = await fetch(`${base}/dataset_status`);
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'ok') {
+          throw new Error(data.message || `HTTP ${resp.status}`);
+        }
+        const summary = data.summary || {};
+        document.getElementById('ds-total').textContent = String(summary.totalDatasets ?? 0);
+        document.getElementById('ds-active').textContent = summary.activeDatasetId || '-';
+        document.getElementById('ds-robot-ready').textContent = String(summary.robotReadyCount ?? 0);
+        document.getElementById('ds-operator-ready').textContent = String(summary.operatorReadyCount ?? 0);
+        const tbody = document.getElementById('dataset-table-body');
+        tbody.innerHTML = '';
+        for (const ds of (data.datasets || [])) {
+          const tr = document.createElement('tr');
+          const shortId = (ds.datasetId || '').length > 14 ? `${(ds.datasetId || '').slice(0, 14)}...` : (ds.datasetId || '');
+          const state = ds.stuck ? 'STUCK' : (ds.uploadOnly ? 'UPLOAD_ONLY' : 'OK');
+          tr.innerHTML = `
+            <td title="${ds.datasetId || ''}">${shortId}</td>
+            <td>${ds.taskName || ''}</td>
+            <td>${ds.label || ''}</td>
+            <td class="${ds.robotReady ? 'ok' : 'bad'}">${ds.robotReady ? 'READY' : 'NO'}</td>
+            <td class="${ds.operatorReady ? 'ok' : 'bad'}">${ds.operatorReady ? 'READY' : 'NO'}</td>
+            <td class="${ds.stuck ? 'bad' : 'ok'}">${state}</td>
+            <td>
+              <button class="secondary" data-act="download" data-id="${ds.datasetId || ''}">Download</button>
+              <button class="secondary" data-act="push" data-id="${ds.datasetId || ''}">Push</button>
+              <button class="secondary" data-act="delete" data-id="${ds.datasetId || ''}">Delete</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+        tbody.querySelectorAll('button[data-act]').forEach((btn) => {
+          btn.addEventListener('click', async (ev) => {
+            const act = ev.currentTarget.getAttribute('data-act');
+            const id = ev.currentTarget.getAttribute('data-id');
+            if (!id) return;
+            if (act === 'download') return downloadDataset(id);
+            if (act === 'push') return pushDataset(id);
+            if (act === 'delete') return deleteDataset(id);
+          });
+        });
+        statusEl.textContent = `Status: loaded ${data.datasets?.length || 0} datasets`;
+      } catch (e) {
+        statusEl.textContent = `Status: failed to load (${e.message || e})`;
+      }
+    }
+
+    async function deleteDataset(datasetId) {
+      if (!confirm(`Delete dataset ${datasetId}? This cannot be undone.`)) return;
+      const base = (document.getElementById('dataset-api-base')?.value || '').replace(/\/+$/, '');
+      const resp = await fetch(`${base}/dataset_delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datasetId })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.status !== 'ok') {
+        alert(`Delete failed: ${data.message || resp.status}`);
+        return;
+      }
+      await refreshDatasetStatus();
+      await refreshDatasetLogs();
+    }
+
+    function downloadDataset(datasetId) {
+      const base = (document.getElementById('dataset-api-base')?.value || '').replace(/\/+$/, '');
+      window.open(`${base}/dataset_download/${encodeURIComponent(datasetId)}`, '_blank');
+    }
+
+    async function pushDataset(datasetId) {
+      const base = (document.getElementById('dataset-api-base')?.value || '').replace(/\/+$/, '');
+      const dataNodeUrl = document.getElementById('data-node-url')?.value || '';
+      const uploadPath = document.getElementById('data-node-upload-path')?.value || '/sessions/upload';
+      const resp = await fetch(`${base}/dataset_push`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datasetId, dataNodeUrl, uploadPath })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.status !== 'ok') {
+        alert(`Push failed: ${data.message || resp.status}`);
+      } else {
+        alert(`Push queued/sent for ${datasetId}`);
+      }
+      await refreshDatasetLogs();
+    }
+
+    async function refreshDatasetLogs() {
+      const base = (document.getElementById('dataset-api-base')?.value || '').replace(/\/+$/, '');
+      const area = document.getElementById('dataset-logs');
+      area.value = 'Loading logs...\n';
+      try {
+        const resp = await fetch(`${base}/dataset_logs?lines=200`);
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'ok') {
+          throw new Error(data.message || `HTTP ${resp.status}`);
+        }
+        const lines = [];
+        for (const [name, rows] of Object.entries(data.logs || {})) {
+          lines.push(`===== ${name} =====`);
+          for (const row of rows) lines.push(row);
+          lines.push('');
+        }
+        area.value = lines.join('\n') || 'No logs yet.';
+      } catch (e) {
+        area.value = `Failed to load logs: ${e.message || e}`;
+      }
+    }
+
+    function publishJoints() {
+      if (!jointsPub || !ros || !ros.isConnected) return;
+      const msg = {
+        header: { frame_id: '', stamp: { secs: 0, nsecs: 0 } },
+        name: ['L_X', 'L_Y', 'L_grip', 'L_index', 'R_grip', 'R_index', 'R_A', 'R_B'],
+        position: [xyXPressed ? 1 : 0, xyYPressed ? 1 : 0, 0, 0, 0, 0, 0, 0]
+      };
+      jointsPub.publish(msg);
+    }
+
+    function publishPoseMode() {
+      if (!poseModePub || !ros || !ros.isConnected) return;
+      poseModePub.publish({ data: manualMode ? 'manual' : 'vr' });
+    }
+
+    function publishScale() {
+      if (!scalePub || !ros || !ros.isConnected) return;
+      const v = parseFloat(document.getElementById('scale')?.value || 0.25);
+      scalePub.publish({ data: Math.max(0.0001, Math.min(100, v)) });
+    }
+
+    function exportSettings() {
+      const scale = document.getElementById('scale')?.value || '0.25';
+      const yaml = `# vr_remapper.yaml
+scale: ${scale}
+
+# reference_pose from robot logs (arms in front, slightly lower)
+reference_pose:
+  left: [0.143281, 0.103784, 0.020140]
+  right: [0.124819, -0.087679, 0.016086]
+`;
+      const ta = document.getElementById('export-output');
+      ta.value = yaml;
+      ta.select();
+      try { navigator.clipboard.writeText(yaml); } catch (_) { document.execCommand('copy'); }
+    }
+
+    function subscribe() {
+      manualPosePub = new ROSLIB.Topic({ ros, name: '/teleop_fetch/manual_poses', messageType: 'geometry_msgs/PoseArray' });
+      poseModePub = new ROSLIB.Topic({ ros, name: '/teleop_fetch/pose_mode', messageType: 'std_msgs/String' });
+      jointsPub = new ROSLIB.Topic({ ros, name: '/quest/joints', messageType: 'sensor_msgs/JointState' });
+      scalePub = new ROSLIB.Topic({ ros, name: '/teleop_fetch/scale', messageType: 'std_msgs/Float64' });
+      publishScale();
+      publishPoseMode();
+      if (manualMode && manualPublishInterval) clearInterval(manualPublishInterval);
+      if (manualMode) manualPublishInterval = setInterval(publishManualPoses, 50);
+
+      const f = (v) => (v != null ? Number(v).toFixed(3) : '0');
+
+      new ROSLIB.Topic({ ros, name: '/quest/poses', messageType: 'geometry_msgs/PoseArray' }).subscribe((msg) => {
+        lastQuestPoses = msg;
+        if (manualMode) return;
+        if (msg.poses && msg.poses.length >= 3) {
+          const head = msg.poses[0].position;
+          const left = msg.poses[1].position;
+          const right = msg.poses[2].position;
+          document.getElementById('op-head').textContent = `Head: X=${f(head.x)} Y=${f(head.y)} Z=${f(head.z)}`;
+          document.getElementById('op-left').textContent = `Left: X=${f(left.x)} Y=${f(left.y)} Z=${f(left.z)}`;
+          document.getElementById('op-right').textContent = `Right: X=${f(right.x)} Y=${f(right.y)} Z=${f(right.z)}`;
+          const tL = scalePose(left.x || 0, left.y || 0, left.z || 0, true);
+          const tR = scalePose(right.x || 0, right.y || 0, right.z || 0, false);
+          opLeftMesh.position.set(tL.x, tL.y, tL.z);
+          opRightMesh.position.set(tR.x, tR.y, tR.z);
+          if (!hasDebugTargets) {
+            tgtLeftBodyLink = threeToBodyLink(tL.x, tL.y, tL.z);
+            tgtRightBodyLink = threeToBodyLink(tR.x, tR.y, tR.z);
+            applyAxisMapToTargets();
+          }
+          opLeftMesh.visible = opRightMesh.visible = tgtLeftMesh.visible = tgtRightMesh.visible = true;
+          updateArmLines();
+        }
+      });
+
+      new ROSLIB.Topic({ ros, name: '/teleop_fetch/debug_target_poses', messageType: 'geometry_msgs/PoseArray' }).subscribe((msg) => {
+        if (manualMode) return;
+        if (msg.poses && msg.poses.length >= 2) {
+          hasDebugTargets = true;
+          const left = msg.poses[0].position;
+          const right = msg.poses[1].position;
+          document.getElementById('tgt-left').textContent = `Left: X=${f(left.x)} Y=${f(left.y)} Z=${f(left.z)}`;
+          document.getElementById('tgt-right').textContent = `Right: X=${f(right.x)} Y=${f(right.y)} Z=${f(right.z)}`;
+          tgtLeftBodyLink = { x: left.x || 0, y: left.y || 0, z: left.z || 0 };
+          tgtRightBodyLink = { x: right.x || 0, y: right.y || 0, z: right.z || 0 };
+          applyAxisMapToTargets();
+          tgtLeftMesh.visible = tgtRightMesh.visible = true;
+          updateArmLines();
+        }
+      });
+    }
+
+    function setMode(mode) {
+      manualMode = mode === 'manual';
+      document.getElementById('mode-vr').className = manualMode ? 'secondary' : 'active';
+      document.getElementById('mode-manual').className = manualMode ? 'active' : 'secondary';
+      document.getElementById('mode-status').textContent = manualMode
+        ? 'Manual: drag spheres (cyan=left, orange=right)'
+        : 'VR: poses from /quest/poses';
+      document.getElementById('manual-hint').style.display = manualMode ? 'block' : 'none';
+      document.getElementById('xy-panel').style.display = manualMode ? 'block' : 'none';
+      if (controls) controls.enabled = !manualMode;  // disable scene rotation in Manual — otherwise cannot drag
+      if (manualMode) {
+        tgtLeftMesh.visible = tgtRightMesh.visible = true;
+        tgtLeftBodyLink = { x: T_POSE_LEFT.x, y: T_POSE_LEFT.y, z: T_POSE_LEFT.z };
+        tgtRightBodyLink = { x: T_POSE_RIGHT.x, y: T_POSE_RIGHT.y, z: T_POSE_RIGHT.z };
+        applyAxisMapToTargets();
+      }
+      if (poseModePub && ros && ros.isConnected) publishPoseMode();
+      if (manualPublishInterval) clearInterval(manualPublishInterval);
+      manualPublishInterval = null;
+      if (manualMode && ros && ros.isConnected) {
+        manualPublishInterval = setInterval(publishManualPoses, 50);
+        publishJoints();
+      }
+    }
+
+    document.getElementById('btn-connect').addEventListener('click', connect);
+    document.getElementById('btn-x').addEventListener('mousedown', () => { xyXPressed = true; publishJoints(); document.getElementById('xy-status').textContent = 'X pressed — control enabled'; });
+    document.getElementById('btn-x').addEventListener('mouseup', () => { xyXPressed = false; publishJoints(); document.getElementById('xy-status').textContent = xyYPressed ? 'Y pressed' : 'Press X to enable'; });
+    document.getElementById('btn-x').addEventListener('mouseleave', () => { if (xyXPressed) { xyXPressed = false; publishJoints(); } });
+    document.getElementById('btn-y').addEventListener('mousedown', () => { xyYPressed = true; publishJoints(); document.getElementById('xy-status').textContent = 'Y pressed — stop, arms to start pose'; });
+    document.getElementById('btn-y').addEventListener('mouseup', () => { xyYPressed = false; publishJoints(); document.getElementById('xy-status').textContent = xyXPressed ? 'X pressed' : 'Press X to enable'; });
+    document.getElementById('btn-y').addEventListener('mouseleave', () => { if (xyYPressed) { xyYPressed = false; publishJoints(); } });
+    document.getElementById('mode-vr').addEventListener('click', () => setMode('vr'));
+    document.getElementById('mode-manual').addEventListener('click', () => setMode('manual'));
+    document.getElementById('axis-map').addEventListener('change', () => applyAxisMapToTargets());
+    document.getElementById('btn-export').addEventListener('click', exportSettings);
+    document.getElementById('btn-dataset-refresh').addEventListener('click', refreshDatasetStatus);
+    document.getElementById('btn-dataset-logs').addEventListener('click', refreshDatasetLogs);
+    document.getElementById('btn-open-dataset-dashboard').addEventListener('click', () => {
+      const href = window.location.href.replace(/teleop_debug\.html.*$/, 'dataset_dashboard.html');
+      window.open(href, '_blank');
+    });
+    const scaleEl = document.getElementById('scale');
+    if (scaleEl) {
+      scaleEl.addEventListener('change', publishScale);
+      scaleEl.addEventListener('input', publishScale);
+    }
+    init3D();
+    setInterval(refreshDatasetStatus, 5000);
+  </script>
+</body>
+</html>
