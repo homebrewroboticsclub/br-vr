@@ -16,7 +16,7 @@ Unified VR teleoperation for dual-arm robots: head, arms, grippers, X/Y start/st
 | Component                       | Description                                                    | Status       |
 |---------------------------------|----------------------------------------------------------------|--------------|
 | `teleop_node.py`               | Main node: head, arms, start/stop                             | ✅            |
-| `vr_remapper_node.py`          | Axis mapping, R_A calibration, scale                          | ✅ beta 1.0  |
+| `vr_remapper_node.py`          | Axis mapping, A-button calibration, scale                      | ✅ beta 1.0  |
 | `pose_source_node.py`          | VR (remapped) + manual → `/teleop_fetch/poses`                | ✅            |
 | `head_controller.py`           | Pan/tilt from head orientation                                | ✅            |
 | `start_stop_controller.py`     | X = enable arms, Y = disable                                  | ✅            |
@@ -97,15 +97,16 @@ Dataset branch:
 
 ## Calibration (beta 1.0)
 
-- **R_A on right joystick:** Operator moves arms into a natural pose (in front, slightly down). `vr_remapper` computes `offset = reference_pose - mapped_vr`. The reference robot pose is defined in `vr_remapper.yaml`.
-- **SCALE:** Sensitivity 0.0001..100, topic `/teleop_fetch/scale`, updated live from the UI.
+- **A button (right controller):** Operator brings hands down to belly, presses A. `vr_remapper` computes `offset = reference_pose - mapped_vr`. Robot movements then match operator pose. Reference robot pose is defined in `vr_remapper.yaml`.
+- **SCALE:** Sensitivity 0.0001..100, topic `/teleop_fetch/scale`, updated live from the VR debug dashboard.
 
 ---
 
 ## Debugging
 
 - **RViz:** `roslaunch teleop_fetch teleop_debug.launch`
-- **Web viz:** rosbridge + `teleop_debug.html`
+- **VR debug dashboard:** `web/teleop_debug.html` — 3D visualization, scale control, manual pose mode, X/Y emulation. Requires rosbridge.
+- **Dataset dashboard:** `web/dataset_dashboard.html` — dataset states, DATA_NODE push, logs.
 - **Topics:** `/teleop_fetch/debug_target_poses`, `/teleop_fetch/teleop_state`, `/visualization_marker`
 
 ---

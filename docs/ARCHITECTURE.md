@@ -24,7 +24,7 @@
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │ 4. OFFSETS AND SCALE                                                           │
-│    offset = reference_pose - mapped_vr   (on R_A press)                        │
+│    offset = reference_pose - mapped_vr   (on A button press)                    │
 │    output = mapped_vr + offset                                                │
 │    output *= scale  (0.0001..100, sensitivity)                                │
 │    All implemented in vr_remapper_node.py                                     │
@@ -71,7 +71,7 @@
     ┌─────────────────────┐                 │
     │   vr_remapper       │                 │
     │   - axis mapping    │                 │
-    │   - R_A calibration │                 │
+    │   - A calibration   │                 │
     │   - scale           │                 │
     └──────────┬──────────┘                 │
               │ /teleop_fetch/              │
@@ -122,12 +122,14 @@
 | 7     | `/teleop_fetch/arm_servo_targets`  | SetBusServosPosition                       |
 | 8     | `teleop_fetch`                     | forwards to bus_servo when X = enable      |
 
-### Calibration (R_A)
+### Calibration (A button)
 
 | Event        | Action                                                        |
 |--------------|---------------------------------------------------------------|
-| R_A pressed  | `vr_remapper`: `offset = reference_pose - mapped_vr`         |
-| Afterwards   | `output = mapped_vr + offset; output *= scale`               |
+| A pressed    | `vr_remapper`: `offset = reference_pose - mapped_vr`          |
+| Afterwards   | `output = mapped_vr + offset; output *= scale`                 |
+
+Operator brings hands down to belly, presses A — robot movements then match operator pose.
 
 ### Scale (sensitivity)
 
@@ -141,7 +143,7 @@
 ## 4. Problems solved in beta 1.0
 
 - **Y/Z inversion:** Quest→body_link mapping is centralized in `_controller_to_body_link`, duplicates and post-mapping hacks removed.
-- **Calibration without T-pose:** Reference robot pose (arms in front) + R_A. Operator brings arms to a similar pose, offset is computed automatically.
+- **Calibration without T-pose:** Reference robot pose (arms in front) + A button. Operator brings hands down to belly, presses A — offset is computed automatically.
 - **Offsets and scale in a single block:** All applied in `vr_remapper`; `fast_ik` receives ready coordinates.
 - **Sensitivity:** Single SCALE parameter (0.0001..100), updated from UI in real time.
 

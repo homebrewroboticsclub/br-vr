@@ -17,6 +17,9 @@ ROS package for dual-arm robot teleoperation using a Quest VR headset on ROS1 No
   - Unified head/arms/grippers start/stop with X/Y buttons
   - Single publisher to `/ros_robot_controller/bus_servo/set_position`
   - Dataset recording and upload API for `.hbr` datasets
+- **Dataset recording**: Robot-side capture (camera, IMU, joints), headset upload API, auto-push to DATA_NODE
+- **VR debug dashboard**: 3D visualization, scale control, manual pose mode
+- **Dataset dashboard**: Web UI for dataset states and DATA_NODE push
 
 ## Dependencies
 
@@ -129,15 +132,23 @@ rosrun teleop_fetch test_arm_setup.py
 
 ## VR arm control
 
-### Calibration system
+### Controller buttons
 
-1. **Start calibration**: Press **X** button on left controller.
-2. **Positioning**: Position arms in start pose (matching robot initial pose).
-3. **Finish calibration**: Press **X** again.
-4. **Control**: Move arms and head — robot will replicate movements with 1:5 scaling.
-5. **Stop**: Press **Y** to stop control and return to start pose.
+| Button | Action |
+|--------|--------|
+| **X** | Start arm control (enable head + arms) |
+| **Y** | Stop arm control (disable, arms return to start pose) |
+| **A** | Calibrate hand position (see below) |
 
 **Note**: Head control is automatically enabled/disabled with arm control.
+
+### Calibration (A button)
+
+1. **Start control**: Press **X** to enable arm control.
+2. **Bring hands down**: Lower your hands to your belly (natural resting pose).
+3. **Calibrate**: Press **A** on the right controller. Robot movements will now closely match yours.
+4. **Control**: Move arms and head — robot replicates movements with 1:5 scaling.
+5. **Stop**: Press **Y** to stop control and return to start pose.
 
 ### Gripper control
 
@@ -157,6 +168,28 @@ The system uses simplified inverse kinematics:
 - **Z-offset** → forearm rotation.
 
 Scaling: robot is 5x smaller than operator (coefficient 0.2).
+
+## Dataset recording
+
+The package supports recording teleoperation sessions as `.hbr` datasets for downstream training:
+
+- **Robot-side recorder** (`dataset_recorder_node.py`): Subscribes to `/record_sessions`, captures camera, IMU, and joint states, finalizes `.hbr` structure.
+- **Upload API** (`dataset_upload_server.py`): `POST /upload_dataset` on port 9191 — receives operator telemetry from the Quest headset and attaches it to the robot-side recording.
+- **Auto-push**: Datasets can be auto-pushed to a DATA_NODE service via `POST /sessions/upload`.
+
+**Dataset dashboard** (`web/dataset_dashboard.html`): Web UI to view dataset states, refresh/push to DATA_NODE, and inspect logs. Open in a browser; configure robot IP and DATA_NODE URL in the header.
+
+## VR debug dashboard
+
+`web/teleop_debug.html` provides a 3D visualization for VR teleop debugging:
+
+- **3D scene**: Head and hand poses in `body_link` frame.
+- **Scale control**: Adjust sensitivity (0.0001..100) in real time.
+- **Manual pose mode**: Drag spheres to test IK without VR.
+- **X/Y emulation**: Start/stop arm control from the UI.
+- **Calibration hint**: Bring hands to belly, press A.
+
+Requires `rosbridge_websocket` and `tf2_web_republisher` (or equivalent) for live data.
 
 ## Dataset recording & docs
 
