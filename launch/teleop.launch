@@ -1,0 +1,83 @@
+<launch>
+  <!-- Unified VR teleop launch: robot_description, move_group, fast_ik, teleop_fetch -->
+  <!-- teleop_fetch is the single publisher to bus_servo -->
+
+  <arg name="use_rviz" default="false" />
+  <arg name="use_gui" default="false" />
+  <arg name="pipeline" default="ompl" />
+  <arg name="fake_execution_type" default="interpolate" />
+  <!-- Recorder + HTTP :9191 + static web UI (dashboard on ~:3002) -->
+  <arg name="enable_dataset_recording" default="true" />
+  <arg name="dataset_web_port" default="3002" />
+  <!-- Legacy T-pose calibration (R_A now lives in vr_remapper); off by default -->
+  <arg name="enable_legacy_teleop_calibration" default="false" />
+
+  <!-- robot_description, SRDF, kinematics -->
+  <include file="$(find robot)/launch/planning_context.launch">
+    <arg name="load_robot_description" value="true"/>
+  </include>
+
+  <!-- joint_state_publisher -->
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" unless="$(arg use_gui)">
+    <rosparam param="source_list">[move_group/fake_controller_joint_states]</rosparam>
+  </node>
+  <node name="joint_state_publisher" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" if="$(arg use_gui)">
+    <rosparam param="source_list">[move_group/fake_controller_joint_states]</rosparam>
+  </node>
+
+  <!-- robot_state_publisher -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true" output="screen" />
+
+  <!-- move_group (fake execution for IK) -->
+  <include file="$(find robot)/launch/move_group.launch">
+    <arg name="allow_trajectory_execution" value="true"/>
+    <arg name="fake_execution" value="true"/>
+    <arg name="fake_execution_type" value="$(arg fake_execution_type)" />
+    <arg name="info" value="true"/>
+    <arg name="pipeline" value="$(arg pipeline)"/>
+    <arg name="load_robot_description" value="false"/>
+  </include>
+
+  <!-- RViz (optional) -->
+  <include file="$(find robot)/launch/moveit_rviz.launch" if="$(arg use_rviz)">
+    <arg name="rviz_config" value="$(find robot)/launch/moveit.rviz"/>
+  </include>
+
+  <!-- VR remapper: axis mapping + R_A calibration + scale -->
+  <node name="vr_remapper" pkg="teleop_fetch" type="vr_remapper_node.py" output="screen">
+    <rosparam command="load" file="$(find teleop_fetch)/config/vr_remapper.yaml"/>
+  </node>
+
+  <!-- Pose source: VR (remapped) + manual merge -> /teleop_fetch/poses -->
+  <node name="pose_source" pkg="teleop_fetch" type="pose_source_node.py" output="screen"/>
+
+  <!-- Fast IK node: subscribes to /teleop_fetch/poses, publishes arm_servo_targets -->
+  <node name="fast_ik_node" pkg="my_package" type="fast_ik_node" output="screen">
+    <rosparam command="load" file="$(find my_package)/config/fast_ik.yaml"/>
+  </node>
+
+  <!-- teleop_fetch: single publisher to bus_servo, head, X/Y start/stop -->
+  <node name="teleop_fetch" pkg="teleop_fetch" type="teleop_node.py" output="screen">
+    <rosparam command="load" file="$(find teleop_fetch)/config/teleop.yaml"/>
+  </node>
+
+  <!-- Dataset recorder: /record_sessions start|stop -> .hbr -->
+  <node name="dataset_recorder" pkg="teleop_fetch" type="dataset_recorder_node.py" output="screen" if="$(arg enable_dataset_recording)">
+    <rosparam command="load" file="$(find teleop_fetch)/config/dataset_recorder.yaml"/>
+  </node>
+
+  <!-- Upload API: POST :9191/upload_dataset (respawn: recover after duplicate-name shutdown or crash) -->
+  <node name="dataset_upload_server" pkg="teleop_fetch" type="dataset_upload_server.py" output="screen" if="$(arg enable_dataset_recording)" respawn="true" respawn_delay="5">
+    <rosparam command="load" file="$(find teleop_fetch)/config/dataset_recorder.yaml"/>
+  </node>
+
+  <!-- Static web: dataset_dashboard.html, teleop_debug.html -->
+  <node name="dataset_web_server" pkg="teleop_fetch" type="dataset_web_server.py" output="screen" if="$(arg enable_dataset_recording)" respawn="true" respawn_delay="5">
+    <param name="port" value="$(arg dataset_web_port)" />
+  </node>
+
+  <!-- Calibration_node (legacy T-pose): R_A calibration now in vr_remapper -->
+  <node name="teleop_calibration" pkg="teleop_fetch" type="calibration_node.py" output="screen" if="$(arg enable_legacy_teleop_calibration)">
+    <param name="robot_arm_span" value="0.4"/>
+  </node>
+</launch>

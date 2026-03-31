@@ -1,0 +1,7 @@
+# Merge peaq claim JSON into dataset metadata.json (see DOC/DATA_NODE_PEAQ_CLAIM_SPEC.md).
+# Empty dataset_id uses active dataset from session_state.json when possible.
+string claim_json
+string dataset_id
+---
+bool success
+string message

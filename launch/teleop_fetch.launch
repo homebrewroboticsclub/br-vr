@@ -1,11 +1,8 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- Launch Fetch robot teleoperation node -->
-  <node name="teleop_fetch" pkg="teleop_fetch" type="fetcher.py" output="screen">
-    <!-- Configuration parameters -->
-    <param name="head_sensitivity" value="1.0" />
-    <param name="max_head_pan" value="2.0" />
-    <param name="max_head_tilt" value="2.0" />
-    <param name="movement_duration" value="0.2" />
+  <!-- Minimal launch: teleop_fetch node only (no robot, move_group, fast_ik) -->
+  <!-- Use teleop.launch for full stack -->
+  <node name="teleop_fetch" pkg="teleop_fetch" type="teleop_node.py" output="screen">
+    <rosparam command="load" file="$(find teleop_fetch)/config/teleop.yaml"/>
   </node>
 </launch>
