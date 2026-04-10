@@ -60,8 +60,16 @@ move_groups:
   left: full_2
   right: full
 
-# Output - single point of publication
+# Output - single point of publication (used when use_kyr_servo_gateway is false)
 servo_topic: "/ros_robot_controller/bus_servo/set_position"
+
+# true: publish arm/start/stop commands to /kyr/bus_servo_in (production with KYR proxy).
+# false: publish to servo_topic above (bench without KYR, or custom remap).
+use_kyr_servo_gateway: true
+
+# true: require ReceiveGrant + KYR open_session before arms/head (production).
+# false: legacy-style bench — immediate ACTIVE, same L_X/L_Y gating; pair with use_kyr_servo_gateway:=false.
+teleop_require_kyr_session: true
 
 # Internal topic from fast_ik_node (arm_servo_targets)
 arm_servo_targets_topic: "/teleop_fetch/arm_servo_targets"

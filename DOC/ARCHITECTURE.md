@@ -121,7 +121,7 @@
 | 5     | `/teleop_fetch/poses`              | PoseArray in body_link                     |
 | 6     | `fast_ik_node`                     | IK → joint values → servo positions        |
 | 7     | `/teleop_fetch/arm_servo_targets`  | SetBusServosPosition                       |
-| 8     | `teleop_fetch`                     | `KYR`, to `/kyr/bus_servo_in` only when **ACTIVE** and **armed** (see below) |
+| 8     | `teleop_fetch`                     | KYR path: to `/kyr/bus_servo_in` when `use_kyr_servo_gateway` and **ACTIVE** and **armed** (see below); bench: direct `servo_topic` when gateway off |
 
 ### Operator sync (bidirectional)
 
@@ -145,6 +145,24 @@ The grant closes only on **`/kyr/close_session`**, invoked by **`teleop_fetch`**
 3. **Wrong name in `JointState`** — Quest/rosbridge sends different `name[]`; set **`~operator_arm/joint_name_lx`** for your layout or **`~arm_stream_requires_lx:=false`** on a bench without the button.
 4. **No `/quest/joints` stream** — button edge cannot be detected; head may work from poses, arms not until armed.
 5. **KYR proxy** — without open session or on `check_policy` deny, commands never reach `/bus_servo/set_position`.
+6. **Grant `scope_json` without `allowed_actions`** — RAID sometimes sends `scope_json: "{}"`. The KYR `SessionModule` **normalizes** empty / missing `allowed_actions` to `["*"]` when opening a session so `check_policy(..., "bus_servo")` does not deny all teleop (see `br-kyr` `session_module.py`). Prefer explicit `{"allowed_actions":["*"]}` or `["bus_servo", ...]` in production grants.
+
+#### Bench parameters (`config/teleop.yaml`)
+
+| Parameter | Default | Meaning |
+|-----------|---------|---------|
+| `use_kyr_servo_gateway` | `true` | If `true`, servo commands go to `/kyr/bus_servo_in`; if `false`, to `servo_topic` (no KYR proxy on that path). |
+| `teleop_require_kyr_session` | `true` | If `false`, legacy-style bench: node starts **ACTIVE** without `receive_grant` / KYR; use with `use_kyr_servo_gateway:=false` so commands are not dropped by the proxy. |
+
+#### Automated integration test (no Quest)
+
+With workspace sourced (`devel/setup.bash`):
+
+```bash
+cd /path/to/ros_ws && source devel/setup.bash && catkin run_tests teleop_fetch --limit-status-rate 0
+```
+
+The `rostest` `test/teleop_kyr_arm_stream.test` starts `kyr_proxy` + `teleop_fetch`, emulates `receive_grant`, `JointState` (L_X edge), and `arm_servo_targets`, and asserts traffic on `/bus_servo/set_position`.
 
 ### Calibration (R_A)
 
@@ -186,7 +204,7 @@ The grant closes only on **`/kyr/close_session`**, invoked by **`teleop_fetch`**
 
 When the operator uses **RAID** (remote teleop), they do not call `http://<robot>:9191` directly. Dataset HTTP is exposed on RAID as a **reverse proxy** to the same server on the robot. See [RAID_APP_DATASET_PROXY_SPEC.md](RAID_APP_DATASET_PROXY_SPEC.md) for the contract (`/api/teleop/robots/<robotId>/dataset/...`). On LAN (lab), Quest may still use `:9191` directly.
 
-**Robot UI:** with `enable_dataset_recording:=true`, including `teleop.launch` (or an equivalent launch that starts the dataset stack) runs **`dataset_web_server`** — static files from `teleop_fetch/web` on **`http://<robot>:3002/`** (e.g. `/dataset_dashboard.html`). The dashboard defaults the dataset API base URL to the same hostname as the page, port **9191**. The DATA_NODE URL field defaults from `auto_push.data_node_url` in `dataset_recorder.yaml` (stock default `http://127.0.0.1:8088` — set your DATA_NODE URL for your LAN); it is persisted in `localStorage` on change. If the UI sends an empty `dataNodeUrl`, `POST /dataset_push` on the robot falls back to the same ROS param `~auto_push/data_node_url`.
+**Robot UI:** with `enable_dataset_recording:=true`, including `teleop.launch` (or an equivalent launch that starts the dataset stack) runs **`dataset_web_server`** — static files from `teleop_fetch/web` on **`http://<robot>:3002/`** (e.g. `/dataset_dashboard.html`). The dashboard defaults the dataset API base URL to the same hostname as the page, port **9191**. The DATA_NODE URL field defaults from `auto_push.data_node_url` in `dataset_recorder.yaml` (stock default `http://127.0.0.1:8088`), overridden at launch by rosparam `auto_push/data_node_url` from arg **`dataset_data_node_url`** in `teleop.launch` / `br_bringup/ecosystem.launch`; it is persisted in `localStorage` on change. If the UI sends an empty `dataNodeUrl`, `POST /dataset_push` on the robot falls back to the same ROS param `~auto_push/data_node_url`.
 
 **Troubleshooting `ERR_CONNECTION_REFUSED` on :3002:** The HTTP server runs only while the ROS node `/dataset_web_server` is alive. It stops if the process exits or receives a ROS shutdown (for example after log line `shutdown request: [/dataset_web_server] Reason: new node registered with same name` — usually a **second** `roslaunch` was started against the **same** rosmaster as an existing stack). Use **one** teleop/dataset launch graph per rosmaster, or stop the old launch before starting another. Confirm the listener with `ss -tlnp | grep 3002` on the robot and `rosnode list | grep dataset_web`. If `teleop.launch` (and thus the dataset web stack) is not started, **:3002** is not opened unless you launch the dataset nodes separately.
 

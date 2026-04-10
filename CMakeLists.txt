@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   ainex_interfaces
   ros_robot_controller
   rospy_x402
+  rostest
 )
 
 add_service_files(
@@ -41,6 +42,7 @@ catkin_install_python(PROGRAMS
   scripts/dataset_recorder_node.py
   scripts/dataset_upload_server.py
   scripts/dataset_web_server.py
+  test/test_teleop_kyr_arm_stream.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -52,4 +54,5 @@ if(CATKIN_ENABLE_TESTING)
   catkin_add_nosetests(tests/test_teleop_state_contract.py)
   catkin_add_nosetests(tests/test_operator_buttons.py)
   catkin_add_nosetests(tests/test_upload_payload_session_fields.py)
+  add_rostest(test/teleop_kyr_arm_stream.test)
 endif()

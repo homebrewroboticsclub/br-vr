@@ -68,9 +68,19 @@ class TeleopNode:
         self._prev_ly = 0.0
         self._xy_edges_need_sync = True
 
-        # Publishers - now point to KYR proxy topics to ensure authorization
+        self._direct_teleop = not bool(self.config['teleop_require_kyr_session'])
+        self._kyr_gateway = bool(self.config['use_kyr_servo_gateway'])
+        if self._direct_teleop and self._kyr_gateway:
+            rospy.logwarn(
+                'teleop_fetch: teleop_require_kyr_session=false with use_kyr_servo_gateway=true — '
+                'KYR proxy will drop servo traffic until open_session; use use_kyr_servo_gateway:=false on bench.'
+            )
+
+        servo_out = (
+            '/kyr/bus_servo_in' if self._kyr_gateway else str(self.config['servo_topic'])
+        )
         self.servo_pub = rospy.Publisher(
-            "/kyr/bus_servo_in",
+            servo_out,
             SetBusServosPosition,
             queue_size=1,
         )
@@ -91,7 +101,22 @@ class TeleopNode:
             queue_size=1,
             latch=True,
         )
-        self._publish_teleop_state('stop_control')
+        if self._direct_teleop:
+            self.session_state = 'ACTIVE'
+            self.operator_armed = not self.arm_stream_requires_lx
+            self._xy_edges_need_sync = True
+            self._ly_disarmed_stream_once = False
+            if self.operator_armed:
+                self._publish_teleop_state('get_control')
+            else:
+                self._publish_teleop_state('stop_control')
+            self._publish_arm_start_position()
+            rospy.loginfo(
+                'teleop_fetch: direct / bench mode (teleop_require_kyr_session=false), servo_out=%s',
+                servo_out,
+            )
+        else:
+            self._publish_teleop_state('stop_control')
 
         # Subscribers
         rospy.Subscriber(
@@ -115,17 +140,25 @@ class TeleopNode:
 
         # Services for lifecycle
         try:
-            rospy.Service('~receive_grant', ReceiveGrant, self._handle_receive_grant)
+            if not self._direct_teleop:
+                rospy.Service('~receive_grant', ReceiveGrant, self._handle_receive_grant)
             rospy.Service('~end_session', EndSession, self._handle_end_session)
         except NameError:
             rospy.logwarn("teleop_fetch services not available. Run catkin_make and source first.")
 
-        # KYR Clients
-        self.kyr_open_session = rospy.ServiceProxy('/kyr/open_session', OpenSession)
-        self.kyr_close_session = rospy.ServiceProxy('/kyr/close_session', CloseSession)
+        # KYR clients (unused in direct bench mode)
+        if not self._direct_teleop:
+            self.kyr_open_session = rospy.ServiceProxy('/kyr/open_session', OpenSession)
+            self.kyr_close_session = rospy.ServiceProxy('/kyr/close_session', CloseSession)
+        else:
+            self.kyr_open_session = None
+            self.kyr_close_session = None
 
         rospy.loginfo(
-            'teleop_fetch initialized: session_state=IDLE, arm_stream_requires_lx=%s, arm_buttons %s/%s on %s',
+            'teleop_fetch initialized: session_state=%s, kyr_gateway=%s, arm_stream_requires_lx=%s, '
+            'arm_buttons %s/%s on %s',
+            self.session_state,
+            self._kyr_gateway,
             self.arm_stream_requires_lx,
             self._joint_lx_name,
             self._joint_ly_name,
@@ -171,6 +204,11 @@ class TeleopNode:
             rospy.logwarn('complete_teleop_payment unavailable (no payment): %s', e)
 
     def _handle_receive_grant(self, req):
+        if self._direct_teleop:
+            return ReceiveGrantResponse(
+                success=False,
+                message="teleop_require_kyr_session is false (direct / bench mode)",
+            )
         if self.session_state in ['ACTIVE', 'PENDING_GRANT']:
             return ReceiveGrantResponse(success=False, message="Session already active or pending")
         
@@ -217,6 +255,8 @@ class TeleopNode:
         ACTIVE → stop arm UI, KYR close_session, optional SOL to operator.
         Used by /teleop_fetch/end_session and by second L_Y (if enabled).
         """
+        if self._direct_teleop:
+            return False, "No KYR session in direct teleop mode"
         if self.session_state != 'ACTIVE':
             return False, "No active session to end"
 
@@ -235,6 +275,18 @@ class TeleopNode:
 
     def _handle_end_session(self, req):
         reason = (req.reason or "").strip() or "end_session_service"
+        if self._direct_teleop:
+            self.operator_armed = False
+            self._xy_edges_need_sync = True
+            self._ly_disarmed_stream_once = False
+            self._publish_teleop_state('stop_control')
+            self._publish_arm_start_position()
+            self._reset_head_to_base()
+            self._reset_grippers()
+            return EndSessionResponse(
+                success=True,
+                message="direct mode: arm stream stopped; KYR not used (%s)" % reason,
+            )
         ok, msg = self._finalize_kyr_session_and_pay(reason)
         return EndSessionResponse(success=ok, message=msg)
 
@@ -245,8 +297,9 @@ class TeleopNode:
         self.vr_data.left_hand_pose = data.left_hand_pose
         self.vr_data.right_hand_pose = data.right_hand_pose
 
-        if self.session_state == 'ACTIVE':
+        if self.session_state == 'ACTIVE' or self._direct_teleop:
             self._process_head_control()
+            self._process_operator_xy_buttons(self.vr_data.left_x, self.vr_data.left_y)
 
     def _joints_callback(self, msg):
         joint_dict = joint_state_to_dict(msg)
@@ -256,7 +309,7 @@ class TeleopNode:
         self._process_operator_xy_buttons(lx, ly)
 
     def _process_operator_xy_buttons(self, lx, ly):
-        if self.session_state != 'ACTIVE':
+        if self.session_state != 'ACTIVE' and not self._direct_teleop:
             return
         if self._xy_edges_need_sync:
             self._prev_lx = lx
@@ -275,11 +328,14 @@ class TeleopNode:
             and self.end_session_on_second_ly
             and self._ly_disarmed_stream_once
         ):
-            ok, msg = self._finalize_kyr_session_and_pay("operator_second_ly_press")
-            if ok:
-                rospy.loginfo("Second L_Y: KYR session closed and billing path run: %s", msg)
+            if self._direct_teleop:
+                rospy.loginfo("Second L_Y: ignored in direct teleop mode (no KYR session)")
             else:
-                rospy.logwarn("Second L_Y: failed to finalize session: %s", msg)
+                ok, msg = self._finalize_kyr_session_and_pay("operator_second_ly_press")
+                if ok:
+                    rospy.loginfo("Second L_Y: KYR session closed and billing path run: %s", msg)
+                else:
+                    rospy.logwarn("Second L_Y: failed to finalize session: %s", msg)
         elif x_edge and not self.operator_armed:
             self.operator_armed = True
             self._publish_teleop_state('get_control')
@@ -344,10 +400,11 @@ class TeleopNode:
         rospy.loginfo('Grippers reset')
 
     def _arm_targets_callback(self, msg):
-        """Forward arm targets from fast_ik to KYR proxy when session armed."""
-        if self.session_state != 'ACTIVE' or not self.operator_armed:
+        """Forward arm targets from fast_ik to KYR proxy (or direct servo topic) when session armed."""
+        active_ok = self.session_state == 'ACTIVE' or self._direct_teleop
+        if not active_ok or not self.operator_armed:
             if (
-                self.session_state == 'ACTIVE'
+                active_ok
                 and not self.operator_armed
                 and self.arm_stream_requires_lx
                 and msg.position

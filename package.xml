@@ -29,6 +29,9 @@
   <exec_depend>robot</exec_depend>
   <exec_depend>my_package</exec_depend>
 
+  <test_depend>rostest</test_depend>
+  <test_depend>KYR</test_depend>
+
   <export>
   </export>
 </package>

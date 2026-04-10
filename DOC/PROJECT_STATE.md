@@ -31,6 +31,8 @@ Unified VR teleoperation for dual-arm robots: head, arms, grippers, X/Y start/st
 
 **Launch:** `roslaunch teleop_fetch teleop.launch`
 
+**CI / headless:** `catkin run_tests teleop_fetch` runs nosetests plus `rostest` `test/teleop_kyr_arm_stream.test` (KYR proxy + emulated grant + `arm_servo_targets` → `/bus_servo/set_position`). KYR `SessionModule` normalizes empty grant `scope_json` so `bus_servo` is allowed (see `ARCHITECTURE.md`).
+
 ---
 
 ### my_package (fast_ik_node)

@@ -67,6 +67,11 @@ def load_config():
     config['arm_servo_targets_topic'] = p('arm_servo_targets_topic', '/teleop_fetch/arm_servo_targets')
     config['teleop_state_topic'] = p('teleop_state_topic', '/teleop_state')
 
+    # If True (default), arm/start/stop servo commands go to /kyr/bus_servo_in; else direct to servo_topic (bench / no KYR).
+    config['use_kyr_servo_gateway'] = p('use_kyr_servo_gateway', True)
+    # If False, skip KYR grant lifecycle: behave like legacy teleop (always allow arm stream gating via L_X only).
+    config['teleop_require_kyr_session'] = p('teleop_require_kyr_session', True)
+
     # Arm stream to KYR: if True, need rising edge on operator_arm joint after ACTIVE (Quest L_X).
     config['arm_stream_requires_lx'] = p('arm_stream_requires_lx', True)
     config['joint_name_lx'] = p('operator_arm/joint_name_lx', 'L_X')
