@@ -3,6 +3,8 @@
   <node pkg="KYR" type="kyr_proxy_node.py" name="kyr_proxy" output="screen">
     <!-- Empty list => SessionModule.verify_grant bypass (see kyr/session_module.py). -->
     <rosparam param="trusted_raid_keys">[]</rosparam>
+    <!-- Isolate rostest from hardware topic layout (production default is ros_robot_controller/...). -->
+    <param name="servo_command_out_topic" value="/bus_servo/set_position" />
   </node>
 
   <node pkg="teleop_fetch" type="teleop_node.py" name="teleop_fetch" output="screen">

@@ -100,10 +100,10 @@
     └──────────┬──────────┘
               │
               ▼
-    ┌─────────────────────┐     ┌─────────────────────┐
-    │ bus_servo/set_position│   │ head_pan/tilt       │
-    │ (physical servos)     │   │ /command            │
-    └─────────────────────┘     └─────────────────────┘
+    ┌─────────────────────────────────┐     ┌─────────────────────┐
+    │ /ros_robot_controller/          │     │ head_pan/tilt       │
+    │ bus_servo/set_position          │     │ /command            │
+    └─────────────────────────────────┘     └─────────────────────┘
 ```
 
 ---
@@ -144,7 +144,7 @@ The grant closes only on **`/kyr/close_session`**, invoked by **`teleop_fetch`**
 2. **`arm_stream_requires_lx:=true` (default)** — until a **press** (rising edge >0.5) on **`joint_name_lx`**, `arm_servo_targets` are **dropped** (warning to log every ~10 s).
 3. **Wrong name in `JointState`** — Quest/rosbridge sends different `name[]`; set **`~operator_arm/joint_name_lx`** for your layout or **`~arm_stream_requires_lx:=false`** on a bench without the button.
 4. **No `/quest/joints` stream** — button edge cannot be detected; head may work from poses, arms not until armed.
-5. **KYR proxy** — without open session or on `check_policy` deny, commands never reach `/bus_servo/set_position`.
+5. **KYR proxy** — without open session or on `check_policy` deny, commands never reach the driver. The proxy publishes to **`/ros_robot_controller/bus_servo/set_position`** by default (param `servo_command_out_topic` on `kyr_proxy`).
 6. **Grant `scope_json` without `allowed_actions`** — RAID sometimes sends `scope_json: "{}"`. The KYR `SessionModule` **normalizes** empty / missing `allowed_actions` to `["*"]` when opening a session so `check_policy(..., "bus_servo")` does not deny all teleop (see `br-kyr` `session_module.py`). Prefer explicit `{"allowed_actions":["*"]}` or `["bus_servo", ...]` in production grants.
 
 #### Bench parameters (`config/teleop.yaml`)
