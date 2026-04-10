@@ -178,6 +178,16 @@ Example: `base_url` = `https://data-node.example`, `batch_path` = `/v1/ingest/ro
 
 **Optional:** `POST /incidents` for structured incident creation (same auth) with fields aligned to §3.3 — exact path and body are DATA_NODE’s; preserve semantics.
 
+### 5.1 KYR incidents in the batch (normative addendum)
+
+When an event has **`source: "kyr_incident"`** (emitted by KYR from `incidents.jsonl`):
+
+1. **`eventUid` MUST equal** the incident’s stable client id: the UUID v4 in **`metadata.incident_uid`** (and typically duplicated as top-level `incident_uid` inside `metadata` when `metadata` is the full KYR record).
+2. Implementations that maintain an **`incidents`** table (§3.3) **SHOULD upsert** one row per such event using **`eventUid`** / **`incident_uid`** as the **idempotent** primary key (same event re-posted must not create duplicates).
+3. The full KYR incident object is carried in **`metadata`** for parsing (`severity`, `category`, `operator_help_requested`, `during_teleop`, `payload`, correlation ids, etc.).
+
+If a backend only stores batch rows in **`robot_events`** (§3.4) and does not project to **`incidents`**, it SHOULD still accept and deduplicate by `eventUid`; fleet UX may then rely on filtering `source === "kyr_incident"` instead of a separate incidents API.
+
 ---
 
 ## 6. When data arrives
@@ -185,7 +195,7 @@ Example: `base_url` = `https://data-node.example`, `batch_path` = `/v1/ingest/ro
 | Path | When | Content |
 |------|------|---------|
 | `POST /sessions/upload` | Dataset finalized / pushed from robot | Teleop episode + correlation metadata |
-| `POST …/robot-events` (batch) | Periodic or on trigger from robot (KYR sync worker) | Dashboard, audit, state/USB deltas |
+| `POST …/robot-events` (batch) | Periodic or on trigger from robot (KYR sync worker) | Dashboard, audit, KYR incidents (`source: kyr_incident`), state/USB deltas |
 | RAID → DATA_NODE (optional) | Help saved / updated | Incident + help metadata (if you implement relay) |
 | `POST /incidents` (optional) | Explicit incident API | Structured incidents |
 
