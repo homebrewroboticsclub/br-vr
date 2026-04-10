@@ -31,7 +31,7 @@ Unified VR teleoperation for dual-arm robots: head, arms, grippers, X/Y start/st
 
 **Launch:** `roslaunch teleop_fetch teleop.launch`
 
-**CI / headless:** `catkin run_tests teleop_fetch` runs nosetests plus `rostest` `test/teleop_kyr_arm_stream.test` (KYR proxy + emulated grant + `arm_servo_targets` → `/bus_servo/set_position`). KYR `SessionModule` normalizes empty grant `scope_json` so `bus_servo` is allowed (see `ARCHITECTURE.md`).
+**CI / headless:** `catkin run_tests teleop_fetch` runs nosetests plus `rostest` `test/teleop_kyr_arm_stream.test` (KYR proxy + emulated grant + `arm_servo_targets`; the test sets `servo_command_out_topic` to `/bus_servo/set_position` so no hardware node is required). On the robot, `kyr_proxy` defaults to **`/ros_robot_controller/bus_servo/set_position`**. KYR `SessionModule` normalizes empty grant `scope_json` so `bus_servo` is allowed (see `ARCHITECTURE.md`).
 
 ---
 
@@ -71,7 +71,7 @@ Unified VR teleoperation for dual-arm robots: head, arms, grippers, X/Y start/st
 | Component            | Description                   | Status |
 |----------------------|-------------------------------|--------|
 | SetBusServosPosition | Bus servo command message     | ✅      |
-| bus_servo/set_position | Topic for servo positions  | ✅      |
+| `/ros_robot_controller/bus_servo/set_position` | Driver input (`SetBusServosPosition`); KYR proxy publishes here after policy | ✅      |
 
 ---
 
@@ -80,7 +80,7 @@ Unified VR teleoperation for dual-arm robots: head, arms, grippers, X/Y start/st
 See [ARCHITECTURE.md](ARCHITECTURE.md) for abstraction levels, flows, and diagrams.
 
 Short version:  
-`/quest/poses` → `vr_remapper` (map + R_A calibration + scale) → `pose_source` → `fast_ik` (IK) → `teleop_fetch` → `bus_servo`.
+`/quest/poses` → `vr_remapper` (map + R_A calibration + scale) → `pose_source` → `fast_ik` (IK) → `teleop_fetch` → `/kyr/bus_servo_in` → `kyr_proxy` → `/ros_robot_controller/bus_servo/set_position`.
 
 Dataset branch:  
 `/record_sessions` + robot sensors + `/upload_dataset` → dataset recorder → `.hbr`.
