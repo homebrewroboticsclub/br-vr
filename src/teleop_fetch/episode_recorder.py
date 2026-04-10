@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import rospy
 
+from teleop_fetch.correlation_metadata import merge_data_node_correlation_metadata
 from teleop_fetch.hbr_writer import (
     default_metadata,
     write_camera_frames_jsonl,
@@ -176,6 +177,7 @@ class EpisodeRecorder:
         metadata["rosTimeWasSynchronizedAtStart"] = self._ros_sync_start
         metadata["rosTimeWasSynchronizedAtEnd"] = self._ros_sync_end
         metadata["durationSec"] = max(0.0, (self._ended_local_ns - self._started_local_ns) / 1e9)
+        merge_data_node_correlation_metadata(metadata, self.dataset_id)
         write_metadata(os.path.join(self._hbr_dir, "metadata.json"), metadata)
         write_events_jsonl(os.path.join(self._hbr_dir, "operator", "events.jsonl"), self._events)
         write_lerobot_manifest(self._hbr_dir, metadata, len(self._robot_frames), len(self._operator_frames))
@@ -280,6 +282,7 @@ class EpisodeRecorder:
         )
         duration = max(0.0, (metadata["endedLocalUnixTimeNs"] - metadata["startedLocalUnixTimeNs"]) / 1e9)
         metadata["durationSec"] = duration
+        merge_data_node_correlation_metadata(metadata, self.dataset_id)
         write_metadata(metadata_path, metadata)
         write_lerobot_manifest(self._hbr_dir, metadata, len(self._robot_frames), len(operator_frames))
 

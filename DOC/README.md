@@ -50,6 +50,9 @@ Then open the PR from **deushon/br-vr-dev-sinc** branch `RX_SPR_2` into **homebr
 - [RAID_APP_DATASET_PROXY_SPEC.md](RAID_APP_DATASET_PROXY_SPEC.md) — **RAID App** (`x402_raid_app`): HTTP reverse proxy to dataset API on robot (`:9191`) for operators via JWT.
 - [RAID_APP_PEAQ_CLAIM_SPEC.md](RAID_APP_PEAQ_CLAIM_SPEC.md) — **RAID App**: peaq claim on Agung, `teleop/help` extension and `GET …/peaq/claim`.
 - [DATA_NODE_OPERATOR_SESSION_SPEC.md](DATA_NODE_OPERATOR_SESSION_SPEC.md) — **DATA_NODE**: extended teleop session fields, `metadata.json`, multipart `operatorSessionMeta` on `POST /sessions/upload`.
+- [DATA_NODE_INGEST_AND_EVENTS_SPEC.md](DATA_NODE_INGEST_AND_EVENTS_SPEC.md) — **DATA_NODE**: robots, teleop sessions, incidents, `robot_events` batch ingest, multipart `robotCorrelationsMeta`.
+- [RAID_APP_DATA_NODE_CORRELATION_SPEC.md](RAID_APP_DATA_NODE_CORRELATION_SPEC.md) — **RAID App**: `teleop/help` metadata for DATA_NODE joins (`dataset_id`, `kyr_session_id`, …).
+- [DATA_NODE_ROBOT_INCIDENT_SESSION_SPEC.md](DATA_NODE_ROBOT_INCIDENT_SESSION_SPEC.md) — pointer to the two specs above (supersedes the old monolithic doc).
 - [DATA_NODE_PEAQ_CLAIM_SPEC.md](DATA_NODE_PEAQ_CLAIM_SPEC.md) — **DATA_NODE**: optional multipart part `peaqClaim` when uploading dataset from robot.
 
 ---

@@ -134,6 +134,7 @@ If none of these are set, the **`operatorSessionMeta` part is omitted** entirely
 
 ## 5. Related docs
 
+- [DATA_NODE_INGEST_AND_EVENTS_SPEC.md](DATA_NODE_INGEST_AND_EVENTS_SPEC.md) — robot registry, incidents, `robot_events` batch, optional multipart `robotCorrelationsMeta` (`kyrRobotId`, `kyrSessionId`, `raidRobotUuid`).
 - [TELEOP_DATAS.md](TELEOP_DATAS.md) — full headset upload contract and frames.
 - [HBR.md](HBR.md) — `.hbr` layout.
 - [RAID_APP_DATASET_PROXY_SPEC.md](RAID_APP_DATASET_PROXY_SPEC.md) — HTTPS proxy to the same upload API (transparent body).

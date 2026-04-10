@@ -45,6 +45,9 @@ from teleop_fetch.operator_buttons import rising_edge
 # Quest left controller: L_X = start streaming, L_Y = stop (joints on ~vr_input/joints_topic)
 _BUTTON_THRESH = 0.5
 
+# Global param for DATA_NODE correlation (see DOC/DATA_NODE_INGEST_AND_EVENTS_SPEC.md).
+_KYR_SESSION_CORR_PARAM = "/teleop_fetch/current_kyr_session_id"
+
 
 class TeleopNode:
     def __init__(self):
@@ -53,6 +56,7 @@ class TeleopNode:
 
         # State machine: IDLE, REQUESTED, PENDING_GRANT, ACTIVE, FINISHED, FAILED
         self.session_state = 'IDLE'
+        self.current_session_id = None
 
         # VR data cache
         self.vr_data = VRData()
@@ -118,6 +122,8 @@ class TeleopNode:
         else:
             self._publish_teleop_state('stop_control')
 
+        self._clear_kyr_session_correlation_param()
+
         # Subscribers
         rospy.Subscriber(
             self.config['poses_topic'],
@@ -170,6 +176,17 @@ class TeleopNode:
                 'Rebuild catkin with rospy_x402 + teleop_fetch.'
             )
 
+    @staticmethod
+    def _clear_kyr_session_correlation_param():
+        try:
+            rospy.delete_param(_KYR_SESSION_CORR_PARAM)
+        except KeyError:
+            pass
+
+    @staticmethod
+    def _set_kyr_session_correlation_param(session_id: str):
+        rospy.set_param(_KYR_SESSION_CORR_PARAM, session_id)
+
     def _complete_teleop_payment_optional(self, receipt_payload):
         """SOL transfer to operator via rospy_x402 (same wallet as x402_buy_service)."""
         if CompleteTeleopPayment is None:
@@ -221,6 +238,7 @@ class TeleopNode:
             if res.success:
                 self.session_state = 'ACTIVE'
                 self.current_session_id = res.session_id
+                self._set_kyr_session_correlation_param(res.session_id)
                 rospy.loginfo(f"KYR session {res.session_id} opened. State -> ACTIVE")
                 self._xy_edges_need_sync = True
                 self._ly_disarmed_stream_once = False
@@ -242,10 +260,12 @@ class TeleopNode:
                 return ReceiveGrantResponse(success=True, message=res.message)
             else:
                 self.session_state = 'FAILED'
+                self._clear_kyr_session_correlation_param()
                 rospy.logwarn(f"KYR denied session: {res.message}. State -> FAILED")
                 return ReceiveGrantResponse(success=False, message=res.message)
         except rospy.ServiceException as e:
             self.session_state = 'FAILED'
+            self._clear_kyr_session_correlation_param()
             msg = f"Failed to call KYR open_session: {e}"
             rospy.logerr(msg)
             return ReceiveGrantResponse(success=False, message=msg)
@@ -266,6 +286,7 @@ class TeleopNode:
             rospy.wait_for_service('/kyr/close_session', timeout=5.0)
             res = self.kyr_close_session(self.current_session_id, reason)
             if res.success:
+                self._clear_kyr_session_correlation_param()
                 self._complete_teleop_payment_optional(res.receipt_payload)
             return res.success, res.message
         except rospy.ServiceException as e:

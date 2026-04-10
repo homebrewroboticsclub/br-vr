@@ -29,6 +29,19 @@ from teleop_fetch.sensors.ros_imu import ROSIMU
 from teleop_fetch.sensors.ros_joint_sensor import ROSJointSensor
 from teleop_fetch.upload_models import RecordSessionEvent
 
+_ACTIVE_DATASET_CORR_PARAM = "/dataset_recorder/active_dataset_id"
+
+
+def _set_active_dataset_correlation_param(dataset_id: str) -> None:
+    rospy.set_param(_ACTIVE_DATASET_CORR_PARAM, dataset_id)
+
+
+def _clear_active_dataset_correlation_param() -> None:
+    try:
+        rospy.delete_param(_ACTIVE_DATASET_CORR_PARAM)
+    except KeyError:
+        pass
+
 
 def _load_recorder_config() -> Dict[str, Any]:
     def p(name, default):
@@ -128,6 +141,7 @@ class DatasetRecorderNode:
             )
         rospy.loginfo("dataset_recorder ready: topic=%s", self.config["record_sessions_topic"])
         self._append_log("node_started", {"topic": self.config["record_sessions_topic"]})
+        _clear_active_dataset_correlation_param()
         self._write_state_file()
 
     def _append_log(self, event: str, payload: Dict[str, Any]) -> None:
@@ -272,6 +286,7 @@ class DatasetRecorderNode:
                     imu=self.imu,
                     joint_sensor=self.joint_sensor,
                 )
+                _set_active_dataset_correlation_param(event.record_id)
                 rospy.loginfo("Dataset recording started: %s", event.record_id)
                 self._append_log("record_start", {"recordId": event.record_id, "sendHz": event.send_hz})
             elif event.event_type == "stop":
@@ -279,6 +294,7 @@ class DatasetRecorderNode:
                     dataset_id=event.record_id,
                     ros_time_synchronized=event.ros_time_synchronized,
                 )
+                _clear_active_dataset_correlation_param()
                 rospy.loginfo("Dataset recording stopped: %s", event.record_id)
                 self._append_log("record_stop", {"recordId": event.record_id})
             self._write_state_file()
