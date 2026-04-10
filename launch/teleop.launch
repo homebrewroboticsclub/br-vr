@@ -11,6 +11,8 @@
   <arg name="dataset_web_port" default="3002" />
   <!-- DATA_NODE base URL for auto/manual push (POST …/sessions/upload); overrides dataset_recorder.yaml auto_push.data_node_url -->
   <arg name="dataset_data_node_url" default="http://127.0.0.1:8088" />
+  <!-- Legacy static server for dataset_dashboard / teleop_debug on dataset_web_port. Unified KYR UI (br_bringup) sets this false. -->
+  <arg name="enable_dataset_web_server" default="true" />
   <!-- Legacy T-pose calibration (R_A now lives in vr_remapper); off by default -->
   <arg name="enable_legacy_teleop_calibration" default="false" />
 
@@ -75,10 +77,14 @@
     <param name="auto_push/data_node_url" value="$(arg dataset_data_node_url)" />
   </node>
 
-  <!-- Static web: dataset_dashboard.html, teleop_debug.html -->
-  <node name="dataset_web_server" pkg="teleop_fetch" type="dataset_web_server.py" output="screen" if="$(arg enable_dataset_recording)" respawn="true" respawn_delay="5">
-    <param name="port" value="$(arg dataset_web_port)" />
-  </node>
+  <!-- Static web: dataset_dashboard.html, teleop_debug.html (optional when KYR unified dashboard serves them) -->
+  <group if="$(arg enable_dataset_recording)">
+    <group if="$(arg enable_dataset_web_server)">
+      <node name="dataset_web_server" pkg="teleop_fetch" type="dataset_web_server.py" output="screen" respawn="true" respawn_delay="5">
+        <param name="port" value="$(arg dataset_web_port)" />
+      </node>
+    </group>
+  </group>
 
   <!-- Calibration_node (legacy T-pose): R_A calibration now in vr_remapper -->
   <node name="teleop_calibration" pkg="teleop_fetch" type="calibration_node.py" output="screen" if="$(arg enable_legacy_teleop_calibration)">
