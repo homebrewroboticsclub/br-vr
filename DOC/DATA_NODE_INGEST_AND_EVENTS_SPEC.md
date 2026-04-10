@@ -1,7 +1,7 @@
 # DATA_NODE — ingest: datasets, robot events, incidents, robots
 
 **Audience:** DATA_NODE service developers (storage, APIs, operator UI).  
-**Version:** 2026-04-10.  
+**Version:** 2026-04-11.  
 **RAID App (help metadata only):** [RAID_APP_DATA_NODE_CORRELATION_SPEC.md](RAID_APP_DATA_NODE_CORRELATION_SPEC.md).  
 **Robot periodic upload (non-teleop events):** [br-kyr/DOC/DATA_NODE_SYNC.md](../../br-kyr/DOC/DATA_NODE_SYNC.md).
 
@@ -16,7 +16,7 @@ DATA_NODE holds:
 3. **Incidents** — abnormal situations; may originate from RAID help, robot-reported payloads, or operator entry.
 4. **Robot event stream** — **append-only** rows for **non-teleop** or **non-dataset** activity: USB attach/detach signals, dashboard feed lines, audit samples, state-hash transitions, etc. These **do not** replace `.hbr`; they enable fleet timelines without opening archives.
 
-Teleop-linked data continues to arrive mainly **at dataset push** (session end / upload complete). Everything else uses **§5** (batch endpoint) when the robot enables sync in **KYR Black Box** UI.
+Teleop-linked data continues to arrive mainly **at dataset push** (session end / upload complete). Everything else uses **§5** (batch endpoint) when the robot enables sync. **URL and auth** for that client are normally **provisioned by RAID** (enroll or push to the robot); see §5.2 and [rospy_x402/DOC/RAID_INTEGRATION.md](../../rospy_x402/DOC/RAID_INTEGRATION.md).
 
 ---
 
@@ -187,6 +187,12 @@ When an event has **`source: "kyr_incident"`** (emitted by KYR from `incidents.j
 3. The full KYR incident object is carried in **`metadata`** for parsing (`severity`, `category`, `operator_help_requested`, `during_teleop`, `payload`, correlation ids, etc.).
 
 If a backend only stores batch rows in **`robot_events`** (§3.4) and does not project to **`incidents`**, it SHOULD still accept and deduplicate by `eventUid`; fleet UX may then rely on filtering `source === "kyr_incident"` instead of a separate incidents API.
+
+### 5.2 Batch auth provisioning (RAID → robot → DATA_NODE)
+
+DATA_NODE issues **API credentials** (shared secret, bearer token, or mTLS policy) to **RAID** (task router), not to each robot by hand. RAID stores per-robot or per-fleet batch config and pushes **`dataNodeSync`** to the robot (see [RAID_INTEGRATION.md](../../rospy_x402/DOC/RAID_INTEGRATION.md)). The robot persists merged settings under **`~/.kyr/data_node_sync_settings.json`** and the KYR worker sends **`Authorization`** (or the configured header) on **`POST …/robot-events`**.
+
+**DATA_NODE product work:** expose an admin or RAID-only API to create/rotate ingest tokens and optional **base URL** overrides when DATA_NODE is relocated; RAID then propagates updates on the next enroll or operator-sync push so robots are not “soft-locked” to an old endpoint.
 
 ---
 
