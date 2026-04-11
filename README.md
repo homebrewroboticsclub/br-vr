@@ -2,7 +2,11 @@
 
 ROS package for dual-arm robot teleoperation using a Quest VR headset on ROS1 Noetic.
 
-**Documentation:** [DOC/README.md](DOC/README.md) (architecture, datasets, operator session contracts)
+**Documentation:** [DOC/README.md](DOC/README.md) (architecture, datasets, operator session contracts). **Agents:** [DEV_AI.md](DEV_AI.md).
+
+## Ecosystem entry point
+
+**Full stack launch (KYR + x402 + this package), RAID, and dashboard ports** — metapackage **`br_bringup`**: **[../br_bringup/README.md](../br_bringup/README.md)**. **Agent index (whole workspace):** **[../br_bringup/DEV_AI.md](../br_bringup/DEV_AI.md)**.
 
 > `teleop_fetch` is the historical/internal package name. The code is robot-agnostic and not tied to any specific vendor robot; Ainex is simply the first robot family with a full configuration and MoveIt integration (see the `ainex_moveit` config package).
 

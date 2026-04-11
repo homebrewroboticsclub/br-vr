@@ -1,6 +1,6 @@
 # VR Teleop — documentation index
 
-All technical documentation lives in **`DOC/`**. The root [README.md](../README.md) is the human-facing overview and setup entry point.
+All technical documentation lives in **`DOC/`**. The root [README.md](../README.md) is the human-facing overview; [DEV_AI.md](../DEV_AI.md) is the agent entry point (links to **`br_bringup`**, KYR, rospy_x402, `robot`, `my_package`).
 
 ## Stack architecture
 
