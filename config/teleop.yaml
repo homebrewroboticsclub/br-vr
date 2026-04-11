@@ -1,0 +1,100 @@
+# teleop_fetch - unified VR teleoperation config
+
+# VR input topics
+vr_input:
+  poses_topic: "/quest/poses"
+  joints_topic: "/quest/joints"
+
+# Robot scale (human -> robot proportion)
+robot_scale:
+  human_arm_length: 0.8
+  robot_arm_length: 0.2
+  neck_offset: 0.25
+  big_head_x_offset: 0.15
+  robot_z_offset: 0.087448
+  hand_center_outer_offset: 0.050
+
+# Servo IDs (from URDF)
+servo_ids:
+  left_arm: [13, 15, 17, 19]   # l_sho_pitch, l_sho_roll, l_el_pitch, l_el_yaw
+  right_arm: [14, 16, 18, 20]
+  left_gripper: 21
+  right_gripper: 22
+
+# Gripper limits (safe per-gripper range)
+gripper:
+  left: { closed: 500, open: 100 }
+  right: { closed: 400, open: 800 }
+
+# Arm start positions (T-pose: arms sideways, Y = stop)
+# Must match T-pose: left (0, 0.25, 0.087), right (0, -0.25, 0.087) in body_link.
+# To recalc: rosrun my_package t_pose_arm_start.py (after roslaunch robot demo.launch)
+# Keys must be strings - rosparam rejects integer keys in nested dicts
+arm_start_positions:
+  left:
+    "13": 874
+    "15": 833
+    "17": 502
+    "19": 44
+    "21": 500
+  right:
+    "14": 126
+    "16": 167
+    "18": 498
+    "20": 956
+    "22": 500
+
+# Head control
+# axis_mapping: "pitch_roll" (Quest default) or "yaw_pitch" (standard Euler)
+head:
+  sensitivity: 1.0
+  max_pan: 2.0
+  max_tilt: 2.0
+  movement_duration: 0.2
+  axis_mapping: "pitch_roll"  # pitch->pan, roll->tilt (matches Quest)
+  pan_topic: "/head_pan_controller/command"
+  tilt_topic: "/head_tilt_controller/command"
+
+# Move groups for IK (fast_ik_node)
+move_groups:
+  left: full_2
+  right: full
+
+# Output - single point of publication (used when use_kyr_servo_gateway is false)
+servo_topic: "/ros_robot_controller/bus_servo/set_position"
+
+# true: publish arm/start/stop commands to /kyr/bus_servo_in (production with KYR proxy).
+# false: publish to servo_topic above (bench without KYR, or custom remap).
+use_kyr_servo_gateway: true
+
+# true: require ReceiveGrant + KYR open_session before arms/head (production).
+# false: legacy-style bench — immediate ACTIVE, same L_X/L_Y gating; pair with use_kyr_servo_gateway:=false.
+teleop_require_kyr_session: true
+
+# Internal topic from fast_ik_node (arm_servo_targets)
+arm_servo_targets_topic: "/teleop_fetch/arm_servo_targets"
+
+# Operator sync: latched std_msgs/String — see DOC/ARCHITECTURE.md
+teleop_state_topic: "/teleop_state"
+
+# Arm stream to KYR after ACTIVE: true = wait for button rising edge (see operator_arm);
+# false = stream immediately after grant (pre-gating behaviour, bench without L_X in JointState).
+arm_stream_requires_lx: true
+
+operator_arm:
+  joint_name_lx: "L_X"
+  joint_name_ly: "L_Y"
+
+# KYR grant close and operator payment: service /teleop_fetch/end_session (RAID may call via rosbridge)
+# or second L_Y after first L_Y disarmed (see DOC/ARCHITECTURE.md teleop session section).
+end_session_on_second_ly: true
+
+# Operator presence watchdog (KYR mode only): liveness from /quest/poses and /quest/joints (see DOC/VR_APP_TELEOP_ROS_CONTRACT.md).
+operator_presence:
+  watchdog_enabled: true
+  timeout_sec: 15.0
+  check_hz: 1.0
+  # Optional std_msgs/String JSON from Quest; empty string disables subscriber.
+  lifecycle_topic: "/quest/teleop_lifecycle"
+  # Max duration to honor VR "pause" before treating as lost (0 = no limit).
+  pause_max_sec: 600.0
