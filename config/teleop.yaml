@@ -88,3 +88,13 @@ operator_arm:
 # KYR grant close and operator payment: service /teleop_fetch/end_session (RAID may call via rosbridge)
 # or second L_Y after first L_Y disarmed (see DOC/ARCHITECTURE.md teleop session section).
 end_session_on_second_ly: true
+
+# Operator presence watchdog (KYR mode only): liveness from /quest/poses and /quest/joints (see DOC/VR_APP_TELEOP_ROS_CONTRACT.md).
+operator_presence:
+  watchdog_enabled: true
+  timeout_sec: 15.0
+  check_hz: 1.0
+  # Optional std_msgs/String JSON from Quest; empty string disables subscriber.
+  lifecycle_topic: "/quest/teleop_lifecycle"
+  # Max duration to honor VR "pause" before treating as lost (0 = no limit).
+  pause_max_sec: 600.0

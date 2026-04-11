@@ -79,4 +79,13 @@ def load_config():
     # After first L_Y disarms arms, second L_Y ends KYR session and triggers operator SOL payment.
     config['end_session_on_second_ly'] = p('end_session_on_second_ly', True)
 
+    # Operator presence watchdog (see DOC/VR_APP_TELEOP_ROS_CONTRACT.md)
+    config['operator_presence_watchdog_enabled'] = p('operator_presence/watchdog_enabled', True)
+    config['operator_presence_timeout_sec'] = float(p('operator_presence/timeout_sec', 15.0))
+    config['operator_presence_check_hz'] = float(p('operator_presence/check_hz', 1.0))
+    config['operator_presence_lifecycle_topic'] = str(
+        p('operator_presence/lifecycle_topic', '/quest/teleop_lifecycle') or ''
+    ).strip()
+    config['operator_presence_pause_max_sec'] = float(p('operator_presence/pause_max_sec', 600.0))
+
     return config

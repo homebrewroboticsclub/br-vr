@@ -2,7 +2,8 @@
 
 **Audience:** developers of DATA_NODE (ingest from robot).  
 **Version:** 2026-03-29 — extended teleop session fields (`acceptedAtUtcIso`, `teleopControl`, multipart `operatorSessionMeta`).  
-**Robot implementation:** `br-vr-dev-sinc` (`upload_models.py`, `episode_recorder.py`, `dataset_upload_server.py`).
+**Robot implementation:** `br-vr-dev-sinc` (`upload_models.py`, `episode_recorder.py`, `dataset_upload_server.py`).  
+**Training-tier / recovery (optional):** [DATA_NODE_TELEOP_RECOVERY_INGEST_SPEC.md](DATA_NODE_TELEOP_RECOVERY_INGEST_SPEC.md) — `datasetTrainingTier`, `operatorDataCompleteness`, `sessionOutcome` in `metadata.json` / `operatorSessionMeta`.
 
 ---
 

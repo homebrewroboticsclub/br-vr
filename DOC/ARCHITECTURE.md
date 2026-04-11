@@ -136,7 +136,7 @@ Chain: RAID → grant → **`open_session`** → **ACTIVE** → (if `arm_stream_
 
 #### KYR session close and operator payment (x402)
 
-The grant closes only on **`/kyr/close_session`**, invoked by **`teleop_fetch`** from **`/teleop_fetch/end_session`** or after **second L_Y press** (if `~end_session_on_second_ly`, default true): first L_Y only disarms (**KYR session stays ACTIVE**), second L_Y ends the session and triggers **`/x402/complete_teleop_payment`**. For a “button in RAID” flow, the app must call **`/teleop_fetch/end_session`** over rosbridge (type `teleop_fetch/EndSession`, field `reason`). Without that, SOL payment does not run.
+The grant closes only on **`/kyr/close_session`**, invoked by **`teleop_fetch`** from **`/teleop_fetch/end_session`**, after **second L_Y press** (if `~end_session_on_second_ly`, default true), on **operator presence timeout** (no `/quest/poses` or `/quest/joints` for `operator_presence/timeout_sec` while ACTIVE), or on optional VR JSON **`/quest/teleop_lifecycle`** `disconnect` event — see **`DOC/VR_APP_TELEOP_ROS_CONTRACT.md`**. First L_Y only disarms (**KYR session stays ACTIVE**), second L_Y ends the session and triggers **`/x402/complete_teleop_payment`**. For a “button in RAID” flow, the app must call **`/teleop_fetch/end_session`** over rosbridge (type `teleop_fetch/EndSession`, field `reason`). Without an explicit close path, SOL payment does not run.
 
 #### Why arms do not move with fast_ik running
 

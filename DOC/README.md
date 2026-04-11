@@ -5,6 +5,9 @@ All technical documentation lives in **`DOC/`**. The root [README.md](../README.
 ## Stack architecture
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — abstraction layers, topics, flow Quest → remapper → IK → `teleop_fetch`.
+- [VR_APP_TELEOP_ROS_CONTRACT.md](VR_APP_TELEOP_ROS_CONTRACT.md) — **Quest vNext:** rosbridge topics, liveness via `/quest/poses` + `/quest/joints`, optional `/quest/teleop_lifecycle`, upload `contractVersion`.
+- [TELEOP_SESSION_LIFECYCLE_AND_FAILURES.md](TELEOP_SESSION_LIFECYCLE_AND_FAILURES.md) — robot-centric normal path, failures, links to DATA_NODE recovery + RAID payment spec.
+- [DATA_NODE_TELEOP_RECOVERY_INGEST_SPEC.md](DATA_NODE_TELEOP_RECOVERY_INGEST_SPEC.md) — **DATA_NODE:** optional `datasetTrainingTier`, `operatorDataCompleteness`, `sessionOutcome` (backward compatible).
 - **Optional x402 / RAID:** when `rospy_x402` is installed, `teleop_node` can call `/x402/complete_teleop_payment` after a session. Full-cycle RAID contract (reference implementation): [RAID_APP_TELEOP_HELP_FULL_CYCLE_X402_SPEC.md](https://github.com/deushon/rospy_x402/blob/DEV/DOC/RAID_APP_TELEOP_HELP_FULL_CYCLE_X402_SPEC.md) (`rospy_x402`, branch `DEV`).
 
 ## Project state and tasks

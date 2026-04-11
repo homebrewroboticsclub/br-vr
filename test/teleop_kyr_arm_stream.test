@@ -9,6 +9,7 @@
 
   <node pkg="teleop_fetch" type="teleop_node.py" name="teleop_fetch" output="screen">
     <rosparam command="load" file="$(find teleop_fetch)/config/teleop.yaml" />
+    <param name="operator_presence/watchdog_enabled" value="false"/>
   </node>
 
   <test

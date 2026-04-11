@@ -463,6 +463,13 @@ class UploadHandler(BaseHTTPRequestHandler):
             val = metadata.get(key)
             if val is not None and str(val).strip() != "":
                 session_meta[key] = val
+        for key in ("datasetTrainingTier", "operatorDataCompleteness"):
+            val = metadata.get(key)
+            if val is not None and str(val).strip() != "":
+                session_meta[key] = val
+        so = metadata.get("sessionOutcome")
+        if isinstance(so, dict) and so:
+            session_meta["sessionOutcome"] = so
         tc = metadata.get("teleopControl")
         if isinstance(tc, dict):
             session_meta["teleopControl"] = tc
