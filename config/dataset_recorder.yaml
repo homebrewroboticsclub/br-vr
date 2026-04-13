@@ -1,0 +1,52 @@
+# Dataset recorder configuration
+
+record_sessions_topic: "/record_sessions"
+source_ws_url: "ws://localhost:9090"
+
+# Internal recorder timing
+robot_frame_sample_hz: 120.0
+
+# Storage roots
+output_root: "~/.teleop_fetch_datasets/hbr"
+cache_root: "~/.teleop_fetch_datasets/cache"
+upload_inbox_dir: "~/.teleop_fetch_datasets/upload_inbox"
+logs_dir: "~/.teleop_fetch_datasets/logs"
+
+# Robot sensors (real robot defaults)
+camera:
+  enabled: true
+  name: "cam_main"
+  topic: "/camera/image_raw"
+  frame_rate_hz: 30.0
+  queue_size: 200
+
+imu:
+  enabled: true
+  name: "imu_main"
+  topic: "/imu"
+  queue_size: 500
+
+joints:
+  enabled: true
+  topic: "/joint_states"
+  queue_size: 500
+
+# Upload HTTP server
+upload_api:
+  host: "0.0.0.0"
+  port: 9191
+  path: "/upload_dataset"
+
+# Optional: base URL for operator clients (Quest / web) when teleop goes through RAID.
+# Not consumed by recorder nodes today; use as a single place to document the template.
+# Placeholder {robotId} is replaced by the client. Full contract: DOC/RAID_APP_DATASET_PROXY_SPEC.md
+# operator_dataset_base_url: "https://<raid-host>/api/teleop/robots/{robotId}/dataset"
+
+# Automatic push to DATA_NODE after upload payload is applied.
+auto_push:
+  enabled: true
+  # Set to your DATA_NODE URL (LAN or localhost for debugging).
+  data_node_url: "http://127.0.0.1:8088"
+  upload_path: "/sessions/upload"
+  retries: 3
+  retry_delay_sec: 3.0
