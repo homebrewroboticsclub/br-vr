@@ -1,0 +1,67 @@
+# teleop_fetch - unified VR teleoperation config
+
+# VR input topics
+vr_input:
+  poses_topic: "/quest/poses"
+  joints_topic: "/quest/joints"
+
+# Robot scale (human -> robot proportion)
+robot_scale:
+  human_arm_length: 0.8
+  robot_arm_length: 0.2
+  neck_offset: 0.25
+  big_head_x_offset: 0.15
+  robot_z_offset: 0.087448
+  hand_center_outer_offset: 0.050
+
+# Servo IDs (from URDF)
+servo_ids:
+  left_arm: [13, 15, 17, 19]   # l_sho_pitch, l_sho_roll, l_el_pitch, l_el_yaw
+  right_arm: [14, 16, 18, 20]
+  left_gripper: 21
+  right_gripper: 22
+
+# Gripper limits (safe per-gripper range)
+gripper:
+  left: { closed: 500, open: 100 }
+  right: { closed: 400, open: 800 }
+
+# Arm start positions (T-pose: arms sideways, Y = stop)
+# Must match T-pose: left (0, 0.25, 0.087), right (0, -0.25, 0.087) in body_link.
+# To recalc: rosrun my_package t_pose_arm_start.py (after roslaunch robot demo.launch)
+# Keys must be strings - rosparam rejects integer keys in nested dicts
+arm_start_positions:
+  left:
+    "13": 874
+    "15": 833
+    "17": 502
+    "19": 44
+    "21": 500
+  right:
+    "14": 126
+    "16": 167
+    "18": 498
+    "20": 956
+    "22": 500
+
+# Head control
+# axis_mapping: "pitch_roll" (Quest default) or "yaw_pitch" (standard Euler)
+head:
+  sensitivity: 1.0
+  max_pan: 2.0
+  max_tilt: 2.0
+  movement_duration: 0.2
+  axis_mapping: "pitch_roll"  # pitch->pan, roll->tilt (matches Quest)
+  pan_topic: "/head_pan_controller/command"
+  tilt_topic: "/head_tilt_controller/command"
+
+# Move groups for IK (fast_ik_node)
+move_groups:
+  left: full_2
+  right: full
+
+# Output - single point of publication
+servo_topic: "/ros_robot_controller/bus_servo/set_position"
+
+# Internal topic from fast_ik_node (arm_servo_targets)
+arm_servo_targets_topic: "/teleop_fetch/arm_servo_targets"

@@ -1,0 +1,9 @@
+# Reference pose (body_link): arms in front, slightly lower.
+# On A button press operator brings hands down to belly — offset is computed.
+# Adjust for symmetry (left/right may differ slightly).
+reference_pose:
+  left:  [0.143281, 0.103784, 0.020140]   # x, y, z
+  right: [0.124819, -0.087679, 0.016086]
+
+# SCALE: sensitivity 0.0001..100, live update from UI
+scale: 0.25
